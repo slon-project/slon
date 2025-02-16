@@ -1,0 +1,1 @@
+{"version":"2.0.0","tasks":[{"label":"Build All","type":"shell","command":"${workspaceFolder}/scripts/build-all ${workspaceFolder}","group":{"kind":"build","isDefault":true},"problemMatcher":[]}]}
