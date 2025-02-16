@@ -1,0 +1,14 @@
+{
+    "uri": "error.checksum.fail",
+    "title": "error.checksum.fail",
+    "short_description": "A fediverse instance running on TempleOS",
+    "description": "A fediverse instance running on TempleOS",
+    "email": "alec@checksum.fail",
+    "version": "1.0.0",
+    "registrations": false,
+    "stats": {
+        "user_count": 0,
+        "status_count": 0,
+        "domain_count": 0
+    }
+}

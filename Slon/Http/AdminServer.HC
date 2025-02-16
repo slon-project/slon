@@ -1,0 +1,394 @@
+U0 @slon_admin_html_form_from_json_object(SlonHttpSession* session, U8* buf, JsonObject* o)
+{
+    if (!session || !buf || !o)
+        return;
+
+    JsonKey* key = o->keys;
+    String.Append(buf, "<table>");
+    while (key) {
+        switch (key->type) {
+        case JSON_BOOLEAN:
+        case JSON_STRING:
+        case JSON_NUMBER:
+            String.Append(buf, "<tr><td><label>%s</label></td><td>", key->name);
+            break;
+        default:
+            break;
+        }
+        switch (key->type) {
+        case JSON_BOOLEAN:
+            String.Append(buf, "<input name=%s type=checkbox %s>", key->name, @t(key->value, "checked", ""));
+            break;
+        case JSON_STRING:
+            String.Append(buf, "<input name=%s type=text value=\"%s\" required>", key->name, key->value);
+            break;
+        case JSON_NUMBER:
+            String.Append(buf, "<input name=%s type=text value=\"%d\" required>", key->name, ToI64(key->value));
+            break;
+        default:
+            break;
+        }
+        String.Append(buf, "</td></tr>");
+        key = key->next;
+    }
+    String.Append(buf, "</table>");
+}
+
+U0 @slon_admin_create_ap_actor(SlonHttpSession* session, JsonObject* acct)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+
+    JsonObject* actors = db->o("actors");
+    U8* domain = db->o("instance")->@("uri");
+    U8* username = acct->@("username");
+
+    JsonObject* actor = Json.Clone(SLON_DEFAULT_ACTOR_OBJECT);
+
+    StrPrint(scratch_buffer, "https://%s/users/%s", domain, username);
+    actor->set("id", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s/following", domain, username);
+    actor->set("following", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s/followers", domain, username);
+    actor->set("followers", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s/inbox", domain, username);
+    actor->set("inbox", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s/outbox", domain, username);
+    actor->set("outbox", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s/collections/featured", domain, username);
+    actor->set("featured", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s/collections/tags", domain, username);
+    actor->set("featuredTags", scratch_buffer, JSON_STRING);
+    actor->set("preferredUsername", username, JSON_STRING);
+    actor->set("name", acct->@("display_name"), JSON_STRING);
+    actor->set("summary", acct->@("note"), JSON_STRING);
+
+    JsonObject* icon = Json.Parse("{\"type\":\"Image\"}");
+    icon->set("url", acct->@("avatar"), JSON_STRING);
+    actor->set("icon", icon, JSON_OBJECT);
+
+    StrPrint(scratch_buffer, "https://%s/@%s", domain, username);
+    actor->set("url", scratch_buffer, JSON_STRING);
+    actor->set("published", acct->@("created_at"), JSON_STRING);
+    actor->set("attachment", acct->@("fields"), JSON_ARRAY);
+    actor->set("accountId", acct->@("id"), JSON_STRING);
+
+    db->o("private_keys")->set(username, request_json->@("privatekey"), JSON_STRING);
+
+    JsonObject* publickey = Json.CreateObject();
+    StrPrint(scratch_buffer, "https://%s/users/%s#main-key", domain, username);
+    publickey->set("id", scratch_buffer, JSON_STRING);
+    StrPrint(scratch_buffer, "https://%s/users/%s", domain, username);
+    publickey->set("owner", scratch_buffer, JSON_STRING);
+    I64 x;
+    publickey->set("publicKeyPem", @base64_decode(request_json->@("publickey"), &x), JSON_STRING);
+    actor->set("publicKey", publickey, JSON_OBJECT);
+
+    actors->set(acct->@("username"), actor, JSON_OBJECT);
+    @slon_db_save_to_disk;
+}
+
+U0 @slon_admin_create_account(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+
+    U8* id = @slon_api_generate_unique_id(session);
+    U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
+
+    JsonObject* acct = Json.CreateObject();
+    JsonObject* source = Json.CreateObject();
+
+    acct->set("id", id, JSON_STRING);
+    acct->set("created_at", created_at, JSON_STRING);
+    acct->set("username", request_json->@("username"), JSON_STRING);
+    acct->set("acct", request_json->@("username"), JSON_STRING);
+    acct->set("display_name", request_json->@("display_name"), JSON_STRING);
+    acct->set("email", request_json->@("email"), JSON_STRING);
+    acct->set("note", request_json->@("bio"), JSON_STRING);
+    acct->set("avatar", request_json->@("avatar"), JSON_STRING);
+    acct->set("header", request_json->@("header"), JSON_STRING);
+    acct->set("avatar_static", acct->@("avatar"), JSON_STRING);
+    acct->set("header_static", acct->@("header"), JSON_STRING);
+    acct->set("last_status_at", "0", JSON_STRING);
+
+    acct->set("followers_count", 0, JSON_NUMBER);
+    acct->set("following_count", 0, JSON_NUMBER);
+    acct->set("statuses_count", 0, JSON_NUMBER);
+
+    acct->set("locked", FALSE, JSON_BOOLEAN);
+    acct->set("bot", FALSE, JSON_BOOLEAN);
+    acct->set("discoverable", FALSE, JSON_BOOLEAN);
+    acct->set("indexable", FALSE, JSON_BOOLEAN);
+    acct->set("hide_collections", FALSE, JSON_BOOLEAN);
+
+    acct->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    acct->set("fields", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+
+    source->set("privacy", "public", JSON_STRING);
+    source->set("sensitive", FALSE, JSON_BOOLEAN);
+    source->set("language", "", JSON_STRING);
+    source->set("note", acct->@("note"), JSON_STRING);
+    source->set("fields", acct->@("fields"), JSON_ARRAY);
+    source->set("follow_requests_count", 0, JSON_NUMBER);
+
+    acct->set("source", source, JSON_OBJECT);
+
+    StrPrint(scratch_buffer, "https://%s/@%s", db->o("instance")->@("uri"), acct->@("username"));
+    acct->set("url", scratch_buffer, JSON_STRING);
+
+    db->a("accounts")->append(Json.CreateItem(acct, JSON_OBJECT));
+    db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
+    @slon_admin_create_ap_actor(session, acct);
+
+    @slon_db_instance_update_user_count;
+    @slon_db_save_to_disk;
+
+    @slon_free(session, created_at);
+    @slon_free(session, id);
+}
+
+U0 @slon_admin_settings_accounts_new_get(SlonHttpSession* session, U8* buf)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer, request_json;
+    String.Append(buf, "settings/accounts/new");
+    String.Append(buf, "<br><br><form action=/settings/accounts/new/save>");
+    @slon_admin_html_form_from_json_object(session, buf, SLON_DEFAULT_ACCT_OBJECT);
+    String.Append(buf, "<br><br><input id=save type=submit value=Save></form>");
+}
+
+U0 @slon_admin_settings_accounts_get(SlonHttpSession* session, U8* buf)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer, request_json;
+    String.Append(buf, "settings/accounts");
+    String.Append(buf, "<br><br><table><tr><th>id</th><th>username</th></tr>");
+    JsonArray* arr = db->a("accounts");
+    JsonObject* acct;
+    I64 i;
+    for (i = 0; i < arr->length; i++) {
+        acct = arr->@(i);
+        if (acct) {
+            String.Append(buf, "<tr><td>%s</td><td>%s</td></tr>", acct->@("id"), acct->@("username"));
+        }
+    }
+    String.Append(buf, "</table><br><br><button onclick=\"window.location='/settings/accounts/new'\">New</button>");
+}
+
+U0 @slon_admin_settings_apps_get(SlonHttpSession* session, U8* buf)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer, request_json;
+    String.Append(buf, "settings/apps");
+    String.Append(buf, "<br><br>");
+    U8* tmp = Json.Stringify(db->o("apps"));
+    String.Append(buf, tmp);
+    Free(tmp);
+}
+
+U0 @slon_admin_settings_oauth_get(SlonHttpSession* session, U8* buf)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer, request_json;
+    String.Append(buf, "settings/oauth");
+    String.Append(buf, "<br><br>");
+    U8* tmp = Json.Stringify(db->o("oauth"));
+    String.Append(buf, tmp);
+    Free(tmp);
+}
+
+U0 @slon_admin_settings_instance_save_get(SlonHttpSession* session, U8* buf)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    JsonObject* instance = db->o("instance");
+    instance->set("uri", request_json->@("uri"));
+    instance->set("title", request_json->@("title"));
+    instance->set("short_description", request_json->@("short_description"));
+    instance->set("description", request_json->@("description"));
+    instance->set("email", request_json->@("email"));
+    instance->set("version", request_json->@("version"));
+    if (!request_json->@("registrations")) {
+        instance->set("registrations", FALSE);
+    } else {
+        instance->set("registrations", !StrICmp("on", request_json->@("registrations")));
+    }
+    String.Append(buf, "<script>window.location='/settings/instance';</script>");
+}
+
+U0 @slon_admin_settings_instance_get(SlonHttpSession* session, U8* buf)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer, request_json;
+
+    String.Append(buf, "settings/instance");
+    String.Append(buf, "<br><br><form action=/settings/instance/save>");
+    @slon_admin_html_form_from_json_object(session, buf, db->o("instance"));
+    String.Append(buf, "<br><br><input type=submit value=Save></form>");
+}
+
+U0 @slon_admin_new_account(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+
+    if (db->o("actors")->@(request_json->@("username"))) {
+        StrPrint(scratch_buffer, "{\"error\":\"account already exists\"}");
+        @slon_http_set_content_type(session, "application/json");
+        @slon_http_send(session, scratch_buffer, StrLen(scratch_buffer));
+    } else {
+        @slon_admin_create_account(session);
+        @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+    }
+}
+
+U0 @slon_admin_manage_accounts(SlonHttpSession* session)
+{
+    @slon_http_send_json(session, db->a("accounts"));
+}
+
+U0 @slon_admin_info_stats(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn request_json;
+
+    StrPrint(scratch_buffer, "{");
+    String.Append(scratch_buffer, "\"uptime\":\"%d\"", cnts.jiffies);
+    String.Append(scratch_buffer, "}");
+
+    @slon_http_set_content_type(session, "application/json");
+    @slon_http_send(session, scratch_buffer, StrLen(scratch_buffer));
+}
+
+U0 @slon_admin_server_get(SlonHttpSession* session)
+{
+    if (!db->@("setup")) {
+        if (StrICmp("/", @slon_http_request_path(session))) {
+            @slon_http_set_status_code(session, 302);
+            @slon_http_set_header(session, "Location", "/");
+        } else {
+            @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/setup_instance.html");
+        }
+        return;
+    }
+
+    if (!StrICmp("/info/stats", @slon_http_request_path(session))) {
+        @slon_admin_info_stats(session);
+        return;
+    }
+
+    if (!StrICmp("/manage/accounts", @slon_http_request_path(session))) {
+        @slon_admin_manage_accounts(session);
+        return;
+    }
+
+    if (!StrICmp("/", @slon_http_request_path(session))) {
+        @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/main.html");
+        return;
+    }
+
+    @slon_http_set_status_code(session, 404);
+}
+
+U0 @slon_admin_setup_instance(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    JsonObject* instance = db->o("instance");
+    instance->set("uri", request_json->@("uri"));
+    instance->set("title", request_json->@("title"));
+    instance->set("short_description", request_json->@("description"));
+    instance->set("description", request_json->@("description"));
+    instance->set("email", request_json->@("email"));
+    instance->set("registrations", request_json->@("registrations"));
+    @slon_db_save_to_disk;
+    db->set("setup", TRUE);
+
+    @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+}
+
+U0 @slon_admin_server_post(SlonHttpSession* session)
+{
+    if (StrFind("json", @slon_http_request_header(session, "content-type")) > 0) {
+        @slon_http_parse_request_as_json(session);
+    }
+
+    if (!StrICmp("/setup/instance", @slon_http_request_path(session))) {
+        @slon_admin_setup_instance(session);
+        return;
+    }
+
+    if (!StrICmp("/new/account", @slon_http_request_path(session))) {
+        @slon_admin_new_account(session);
+        return;
+    }
+
+    @slon_http_set_status_code(session, 404);
+}
+
+U0 @slon_admin_http_handle_get_request(SlonHttpSession* session)
+{
+    if (@slon_http_request_has_query_string(session)) {
+        @slon_http_parse_query_string(session);
+    }
+    @slon_admin_server_get(session);
+}
+
+U0 @slon_admin_http_handle_post_request(SlonHttpSession* session)
+{
+    @slon_admin_server_post(session);
+}
+
+U0 @slon_admin_http_handle_request(SlonHttpSession* session)
+{
+    switch (@slon_http_request_verb(session)) {
+    case SLON_HTTP_VERB_GET:
+        @slon_admin_http_handle_get_request(session);
+        break;
+    case SLON_HTTP_VERB_POST:
+        @slon_admin_http_handle_post_request(session);
+        break;
+    default:
+        @slon_http_set_status_code(session, 405);
+    }
+}
+
+U0 @slon_admin_http_task(TcpSocket* s)
+{
+    // Bail if we can't acquire socket for some reason
+    if (!@tcp_socket_accept(s))
+        return;
+
+    // Init session
+    SlonHttpSession* session = @slon_http_init_session(s);
+
+    // Parse headers if they are available
+    while (!@slon_http_request_headers_have_been_parsed(session)) {
+        @slon_http_receive(session);
+
+        // Handle malformed requests (anything less than "GET / HTTP/1.0\r\n\r\n" is probably a bad request)
+        if (session->request->buffer->size < 18) {
+            @slon_http_set_status_code(session, 400);
+            goto slon_admin_http_task_send_response;
+        }
+
+        @slon_http_try_parse_request_headers(session);
+    }
+
+    // If we have a content-length header, consume until we receive all the data, then set request->data pointer and size
+    if (StrLen(@slon_http_request_header(session, "content-length"))) {
+        I64 content_length = Str2I64(@slon_http_request_header(session, "content-length"));
+        while (session->request->buffer->data + session->request->buffer->size - session->request->data < content_length)
+            @slon_http_receive(session);
+    }
+
+    @slon_admin_http_handle_request(session);
+
+slon_admin_http_task_send_response:
+    @slon_http_send_response(session);
+    @slon_http_free_session(session);
+    s->close();
+}
+
+Adam("U0 @spawn_slon_admin_http_task(TcpSocket *s){Spawn(%d, s, \"SlonAdminHttpTask\");};\n", &@slon_admin_http_task);
+@tcp_socket_bind(9000, "@spawn_slon_admin_http_task");

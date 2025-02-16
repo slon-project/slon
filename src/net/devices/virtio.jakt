@@ -1,0 +1,143 @@
+import relative parent::os::os { OS }
+import relative parent::os::pci { PCI, PCIDevice }
+
+enum VirtIOConfig: u8 {
+    acknowledge = 1
+    driver = 2
+    driver_ok = 4
+}
+
+enum VirtIOReg: u16 {
+    host_features = 0
+    guest_features = 4
+    queue_page_frame_number = 8
+    queue_size = 12
+    queue_select = 14
+    queue_notify = 16
+    status = 18
+    isr = 19
+    config = 20
+}
+
+class VirtIO {
+    public pci_device: PCIDevice
+    public rq_index: i64
+    public rq_size: u16
+    public rq: u32
+    public tq_size: u16
+    public tq: u32
+    public fn rx_frame(mut this) throws -> [u8] {
+        mut frame: [u8] = []
+        mut queue_notify: bool = false
+        unsafe {
+          cpp {
+"
+#include <../../src/net/devices/virtio.h>
+virtio_queue *rq = (virtio_queue*)this->rq;
+i64 i = this->rq_index;
+i64 used_index = rq->used.index;
+if (used_index < i)
+  used_index += 0x10000;
+if (used_index && i != used_index) {
+  virtio_used_item* item = rq->used.ring;
+  u8* buffer = (u8*)rq->buffers[item[i % 256].index + 1].address;
+  i64 length = item[i % 256].length - 10;
+  for (i64 j = 0; j < length; j++)
+    frame.push(buffer[j]);
+  this->rq_index = used_index % 0x10000;
+  rq->available.index++;
+  queue_notify = true;
+}
+"            
+          }
+        }
+        if queue_notify {
+          .pci_device.io_write_u16(offset: VirtIOReg::queue_notify as! u16, value: 0)
+        }
+        return frame
+    }
+    public fn tx_frame(mut this, anon mut data: [u8]) throws {
+        mut size = data.size()
+        unsafe {
+            cpp {
+"
+#include <../../src/net/devices/virtio.h>
+virtio_queue *tq = (virtio_queue*)this->tq;
+int tq_idx = tq->available.index % 256;
+int tq_idx2 = tq_idx % 128;
+memset((u8*)tq->buffers[tq_idx2 * 2].address, 0, 10);
+u8 *buffer = (u8*)tq->buffers[(tq_idx2 * 2) + 1].address;
+    for (int i = 0; i < size; i++)
+        buffer[i] = data[i];
+tq->buffers[tq_idx2 * 2].length = 10;
+tq->buffers[tq_idx2 * 2].flags = 1;
+tq->buffers[tq_idx2 * 2].next = (tq_idx2 * 2) + 1;
+tq->buffers[(tq_idx2 * 2) + 1].length = size;
+tq->buffers[(tq_idx2 * 2) + 1].flags = 0;
+tq->buffers[(tq_idx2 * 2) + 1].next = 0;
+tq->available.ring[tq_idx] = tq_idx2 * 2;
+tq->available.index++;
+"
+            }
+        }
+        .pci_device.io_write_u16(offset: VirtIOReg::queue_notify as! u16, value: 1)
+    }
+    fn reset_device(this) {
+        .pci_device.io_write_u8(offset: VirtIOReg::status as! u16, value: 0)
+    }
+    fn found_driver(this) throws {
+        .pci_device.io_write_u8(offset: VirtIOReg::status as! u16,
+            value: .pci_device.io_read_u8(VirtIOReg::status as! u16) | VirtIOConfig::acknowledge as! u8 | VirtIOConfig::driver as! u8)
+    }
+    fn setup_rx_queue(mut this) throws {
+        .pci_device.io_write_u16(offset: VirtIOReg::queue_select as! u16, value: 0)
+        .rq_size = .pci_device.io_read_u16(VirtIOReg::queue_size as! u16)
+        .rq = OS::device_calloc(16384)
+        .pci_device.io_write_u32(offset: VirtIOReg::queue_page_frame_number as! u16, value: .rq / 4096)
+    }
+    fn setup_tx_queue(mut this) throws {
+        .pci_device.io_write_u16(offset: VirtIOReg::queue_select as! u16, value: 1)
+        .tq_size = .pci_device.io_read_u16(VirtIOReg::queue_size as! u16)
+        .tq = OS::device_calloc(16384)
+        .pci_device.io_write_u32(offset: VirtIOReg::queue_page_frame_number as! u16, value: .tq / 4096)
+    }
+    fn init_queue_buffers(this) {
+        unsafe {
+            cpp {
+"
+#include <../../src/net/devices/virtio.h>
+virtio_queue *rq = (virtio_queue*)this->rq;
+virtio_queue *tq = (virtio_queue*)this->tq;
+for (int i = 0; i < 128; i++) {
+    rq->buffers[i * 2].address = (u64)calloc(1, 16);
+    rq->buffers[i * 2].length = 10;
+    rq->buffers[i * 2].flags = 3;
+    rq->buffers[i * 2].next = (i * 2) + 1;
+    rq->buffers[(i * 2) + 1].address = (u64)calloc(1, 2048);
+    rq->buffers[(i * 2) + 1].length = 2048;
+    rq->buffers[(i * 2) + 1].flags = 2;
+    rq->buffers[(i * 2) + 1].next = 0;
+    rq->available.ring[i] = i * 2;
+    rq->available.ring[i + 128] = i * 2;
+    tq->buffers[i * 2].address = (u64)calloc(1, 16);
+    tq->buffers[(i * 2) + 1].address = (u64)calloc(1, 2048);
+}
+rq->available.index = 1;
+"
+            }
+        }
+    }
+    fn init_ok(this) throws {
+        .pci_device.io_write_u8(offset: VirtIOReg::status as! u16, 
+          value: .pci_device.io_read_u8(VirtIOReg::status as! u16) | VirtIOConfig::driver_ok as! u8)
+        .pci_device.io_write_u16(offset: VirtIOReg::queue_notify as! u16, value: 0)
+    }
+    public fn init(mut this) throws {
+        .reset_device()
+        .found_driver()
+        .setup_rx_queue()
+        .setup_tx_queue()
+        .init_queue_buffers()
+        .init_ok()
+    }
+}

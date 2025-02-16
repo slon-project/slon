@@ -1,0 +1,12 @@
+<html>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/gh/IdentityModel/oidc-client-js@1.8/dist/oidc-client.min.js"></script>
+    <script>
+        var retry_count = 0, retry_timeout = 2E3; function retryVerifyAccess() { 3 < ++retry_count ? alert("Retry limit exceeded") : setTimeout(verifyAccess, retry_timeout) }
+        async function verifyAccess() { try { var b = localStorage.getItem("authorize"); if (null != b) { const a = await fetch("https://" + window.location.host + "/oauth/verify_access?" + b + window.location.hash.substring(1)); if (a.ok) { const c = await a.json(); window.location = c.redirect_uri } else 202 == a.status ? retryVerifyAccess() : alert("Unexpected response status: " + a.status.toString()) } } catch (a) { retryVerifyAccess() } }
+        var settings = { authority: "https://app.simplelogin.io/", client_id: "templeosfediverseserver-yssuxmkust", response_type: "id_token token", scope: "openid", redirect_uri: "https://" + window.location.host + "/oauth/authorize" }, mgr = new Oidc.UserManager(settings); window.location.search && localStorage.setItem("authorize", window.location.search.replace("?", "").replace("state", "client_state") + "&"); window.location.hash ? verifyAccess() : mgr.signinRedirect();
+    </script>
+</body>
+
+</html>

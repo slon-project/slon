@@ -1,0 +1,29 @@
+import extern c "ioport.h" {
+    extern fn ioport_read_u8(address: u16) -> u8
+    extern fn ioport_read_u16(address: u16) -> u16
+    extern fn ioport_read_u32(address: u16) -> u32
+    extern fn ioport_write_u8(address: u16, value: u8)
+    extern fn ioport_write_u16(address: u16, value: u16)
+    extern fn ioport_write_u32(address: u16, value: u32)
+}
+
+struct IOPort {
+    fn read_u8(anon address: u16) throws -> u8 {
+        return ioport_read_u8(address)
+    }
+    fn read_u16(anon address: u16) throws -> u16 {
+        return ioport_read_u16(address)
+    }
+    fn read_u32(anon address: u16) throws -> u32 {
+        return ioport_read_u32(address)
+    }
+    fn write_u8(address: u16, value: u8) {
+        return ioport_write_u8(address, value)
+    }
+    fn write_u16(address: u16, value: u16) {
+        return ioport_write_u16(address, value)
+    }
+    fn write_u32(address: u16, value: u32) {
+        return ioport_write_u32(address, value)
+    }
+}

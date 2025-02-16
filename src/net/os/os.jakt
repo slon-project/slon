@@ -1,0 +1,154 @@
+import extern c "os.h" {
+    extern fn os_blink(frequency: raw c_char) -> bool
+    extern fn os_call(function_name: u64, arg: u64) -> u64
+    extern fn os_device_calloc(size: u32) -> u32
+    extern fn os_exit()
+    extern fn os_file_picker(path: raw c_char, glob: raw c_char)
+    extern fn os_files_list(path: raw c_char)
+    extern fn os_is_vm() -> bool
+    extern fn os_path_exists(anon path: raw c_char) -> bool
+    extern fn os_pc_speaker(frequency: raw c_char)
+    extern fn os_random() -> u64
+    extern fn os_screenshot()
+    extern fn os_to_uppercase(anon input_string: raw c_char) -> raw c_char
+}
+
+struct OS {
+    fn blink(frequency: f64 = 2.5) throws -> bool {
+        let frequency_as_string = format("{}", frequency)
+        return os_blink(frequency: frequency_as_string.c_string())
+    }
+    fn call(anon function_name: String, anon arg: String) throws -> u64 {
+        mut res: u64 = 0
+        unsafe {
+            cpp {
+                "
+                res = os_call((u64)function_name.characters(), (u64)arg.characters());
+                "
+            }
+        }
+        return res
+    }
+    fn device_calloc(anon size: u32) throws -> u32 {
+        return os_device_calloc(size)
+    }
+    fn device_copy_buffer(anon buffer: [u8]) -> u32 {
+        mut address: u32 = 0
+        mut size = buffer.size()
+        unsafe {
+            cpp {
+                "u8 *data = (u8*)os_device_calloc(size);
+                for (int i = 0; i < size; i++)
+                    data[i] = buffer[i];
+                address = (uintptr_t)data;"
+            }
+        }
+        return address
+    }
+    fn exit() {
+        os_exit()
+    }
+    fn file_picker(path: String, glob: String) throws -> String {
+        mut s = StringBuilder::create()
+        unsafe {
+            cpp {
+                "char const *chars = os_file_picker(path.characters(), glob.characters());
+                s.append_c_string(chars);
+                delete(chars);"
+            }
+        }
+        return s.to_string()
+    }
+    fn files_list(path: String) throws -> [String] {
+        mut s = StringBuilder::create()
+        unsafe {
+            cpp {
+                "char const *chars = os_files_list(path.characters());
+                if (chars) {
+                    s.append_c_string(chars);
+                    delete(chars);
+                }"
+            }
+        }
+        return s.to_string().split(c'|')
+    }
+    fn path_exists(anon path: String) -> bool {
+        return os_path_exists(path.c_string())
+    }
+    fn is_vm() -> bool {
+        return os_is_vm()
+    }
+    fn pc_speaker(frequency: f64) throws {
+        let frequency_as_string = format("{}", frequency)
+        os_pc_speaker(frequency: frequency_as_string.c_string())
+    }
+    fn put_char(ch: u8) {
+        unsafe {
+            cpp {
+                "putchar(ch);"
+            }
+        }
+    }
+    fn random() -> u64 {
+        return os_random()
+    }
+    fn read_entire_file(anon filename: String) throws -> [u8] {
+        mut size = 0
+        mut buffer: [u8] = []
+        unsafe {
+            cpp {
+                "u8 *data = os_read_entire_file(filename.characters(), &size);
+                for (int i = 0; i < size; i++)
+                  buffer.push(data[i]);
+                free(data);"
+            }
+        }
+        return buffer
+    }
+    fn read_device_memory(address: u32, size: i64) throws -> [u8] {
+        mut buffer: [u8] = [];
+        unsafe {
+            cpp {
+                "u8 *device_memory = (u8*)address;
+                for (int i = 0; i < size; i++)
+                    buffer.push(device_memory[i]);"
+            }
+        }
+        return buffer
+    }
+    fn read_u16_from_device_memory(anon address: u32) throws -> u16 {
+        mut value: u16 = 0
+        unsafe {
+            cpp {
+                "value = *(u16*)address;"
+            }
+        }
+        return value
+    }
+    fn screenshot() {
+        os_screenshot()
+    }
+    fn to_uppercase(anon input_string: String) throws -> String {
+        mut s = StringBuilder::create()
+        unsafe {
+            cpp {
+                "char const *chars = os_to_uppercase(input_string.characters());
+                s.append_c_string(chars);
+                delete(chars);"
+            }
+        }
+        return s.to_string()
+    }
+    fn write_entire_file(filename: String, buffer: [u8]) {
+        mut size = buffer.size()
+        unsafe {
+            cpp {
+                "unsigned char *data = (unsigned char *)malloc(size);
+                for (int i = 0; i < size; i++)
+                    data[i] = buffer[i];
+                os_write_entire_file(filename.characters(), data, size);
+                free(data);"
+            }
+        }
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "tcpip.ipv4_address": "10.20.0.10",
+    "tcpip.ipv4_netmask": "255.255.255.0",
+    "tcpip.ipv4_network": "10.20.0.0",
+    "tcpip.ipv4_gateway": "10.20.0.254",
+    "tcpip.ipv4_dns_server_address": "8.8.8.8",
+    "tcpip.ipv4_dns_server_port": "53",
+    "tcpip.mss_size": "1360",
+    "eof": "eof"
+}

@@ -1,0 +1,350 @@
+/// Expect:
+/// - output: "JsonValue::JsonArray([JsonValue::Object([\"id\": JsonValue::Number(0.5), \"displayName\": JsonValue::JsonString(\"Air\"), \"name\": JsonValue::JsonString(\"air\"), \"hardness\": JsonValue::Number(3.9), \"resistance\": JsonValue::Number(0), \"minStateId\": JsonValue::Number(0), \"maxStateId\": JsonValue::Number(0), \"states\": JsonValue::JsonArray([])])])\n"
+
+enum JsonValue {
+    Null
+    Bool(bool)
+    Number(f64)
+    // FIXME: This variant should be called String
+    JsonString(String)
+    // FIXME: This variant should be called Array
+    JsonArray([JsonValue])
+    Object([String:JsonValue])
+}
+
+fn is_whitespace(anon c: u8) -> bool {
+    return match c {
+        b'\t' | b'\n' | b'\r' | b' ' => true
+        else => false
+    }
+}
+
+class JsonParser {
+    input: String
+    index: usize
+
+    public fn construct(input: String) throws -> JsonParser {
+        return JsonParser(input, index: 0)
+    }
+
+    fn eof(this) -> bool {
+        return .index >= .input.length()
+    }
+
+    public fn parse(mut this) throws -> JsonValue {
+        // FIXME: Jakt::JsonParser ignores trailing whitespace for some reason.
+        let value = .parse_helper()
+        if not .eof() {
+            // FIXME: "Didn't consume all input"
+            throw Error::from_errno(9000)
+        }
+        return value
+    }
+
+    fn skip_whitespace(mut this) {
+        while not .eof() {
+            if not is_whitespace(.input.byte_at(.index)) {
+                break
+            }
+            .index++
+        }
+    }
+
+    fn consume_and_unescape_string(mut this) throws -> String {
+        if not .consume_specific(b'"') {
+            // FIXME: "Expected '"'
+            throw Error::from_errno(9007)
+        }
+
+        mut builder = StringBuilder::create()
+
+        loop {
+            mut ch = 0u8
+            mut peek_index = .index
+            while peek_index < .input.length() {
+                ch = .input.byte_at(peek_index)
+                if ch == b'"' or ch == b'\\' {
+                    break
+                }
+                // FIXME: This is is_ascii_c0_control()
+                if ch < 0x20 {
+                    // FIXME: "Error while parsing string"
+                    throw Error::from_errno(9008)
+                }
+                peek_index++
+            }
+
+            while peek_index != .index {
+                builder.append(.input.byte_at(.index))
+                .index++
+            }
+
+            if .eof() {
+                break
+            }
+
+            if ch == b'"' {
+                break
+            }
+
+            if ch != b'\\' {
+                builder.append(.consume())
+                continue
+            }
+
+            .ignore()
+
+            match .peek() {
+                b'"' | b'/' | b'\\' | b'n' | b'r' | b't' | b'b' | b'f' => {
+                    let ch = .consume()
+                    builder.append(match ch {
+                        b'n' => b'\n'
+                        b'r' => b'\r'
+                        b't' => b'\t'
+                        b'b' => b'\b'
+                        b'f' => b'\f'
+                        else => ch
+                    })
+                }
+                b'u' => {
+                    eprintln("FIXME: Implement unicode literals")
+                    abort()
+                }
+                else => {
+                    // FIXME: "Error while parsing string"
+                    throw Error::from_errno(9009)
+                }
+            }
+        }
+
+        if not .consume_specific(b'"') {
+            // FIXME: "Expected '"'"
+            throw Error::from_errno(9010)
+        }
+
+        return builder.to_string()
+    }
+
+    fn ignore(mut this) {
+        .index++
+    }
+
+    fn peek(this) -> u8 {
+        if .eof() {
+            return 0
+        }
+        return .input.byte_at(.index)
+    }
+
+    fn consume(mut this) -> u8 {
+        let ch = .peek()
+        .index++
+        return ch
+    }
+
+    fn consume_specific(mut this, anon expected: u8) -> bool {
+        if .peek() != expected {
+            return false
+        }
+        .index++
+        return true
+    }
+
+    fn parse_helper(mut this) throws -> JsonValue {
+        .skip_whitespace()
+        return match .peek() {
+            b'{' => .parse_object()
+            b'[' => .parse_array()
+            b'"' => .parse_string()
+            b'-' => .parse_number()
+            b'0' | b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' => .parse_number()
+            b'f' => .parse_false()
+            b't' => .parse_true()
+            b'n' => .parse_null()
+            else => .parse_failure(error_message: "Unexpected character")
+        }
+    }
+
+    fn parse_failure(this, error_message: String) throws -> JsonValue {
+        throw Error::from_errno(9001)
+    }
+
+    fn parse_array(mut this) throws -> JsonValue {
+        mut array: [JsonValue] = []
+        if (not .consume_specific(b'[')) {
+            // Expected '['
+            throw Error::from_errno(9014)
+        }
+        loop {
+            .skip_whitespace()
+            if .peek() == b']' {
+                break
+            }
+            array.push(.parse_helper())
+            .skip_whitespace()
+            if .peek() == b']' {
+                break
+            }
+            if not .consume_specific(b',') {
+                // Expected ','
+                throw Error::from_errno(9014)
+            }
+            .skip_whitespace()
+            if .peek() == b']' {
+                // Unexpected ']'
+                throw Error::from_errno(9014)
+            }
+        }
+        if not .consume_specific(b']') {
+            // Expected ']'
+            throw Error::from_errno(9015)
+        }
+        return JsonValue::JsonArray(array)
+    }
+
+    fn parse_object(mut this) throws -> JsonValue {
+        if not .consume_specific(b'{') {
+            // FIXME: "Expected '{'"
+            throw Error::from_errno(9002)
+        }
+
+        mut values: [String:JsonValue] = [:]
+
+        loop {
+            .skip_whitespace()
+            if .peek() == b'}' {
+                break
+            }
+            .skip_whitespace()
+            let key = .consume_and_unescape_string()
+            .skip_whitespace()
+            if not .consume_specific(b':') {
+                // FIXME: "Expected ':'"
+                throw Error::from_errno(9003)
+            }
+            .skip_whitespace()
+            let value = .parse_helper()
+            // FIXME: This should say `values[key] = value`, but the compiler doesn't wrap it in TRY()
+            values.set(key, value)
+            .skip_whitespace()
+            if .peek() == b'}' {
+                break
+            }
+            if not .consume_specific(b',') {
+                // FIXME: "Expected ','"
+                throw Error::from_errno(9004)
+            }
+            .skip_whitespace()
+            if .peek() == b'}' {
+                // FIXME: "Unexpected '}'"
+                throw Error::from_errno(9005)
+            }
+        }
+        if not .consume_specific(b'}') {
+            // FIXME: "Expected '}'"
+            throw Error::from_errno(9006)
+        }
+        return JsonValue::Object(values)
+    }
+
+    fn char_to_f64(anon num: u8) throws -> f64 {
+        // FIXME 1: Shouldn't need this function at all
+        // FIXME 2: Shouldn't need return in else branch
+        return match num {
+            0u8 => 0.0
+            1u8 => 1.0
+            2u8 => 2.0
+            3u8 => 3.0
+            4u8 => 4.0
+            5u8 => 5.0
+            6u8 => 6.0
+            7u8 => 7.0
+            8u8 => 8.0
+            9u8 => 9.0
+            else => {
+                // FIXME: "Unexpected number"
+                throw Error::from_errno(9017)
+            }
+        }
+    }
+
+    fn parse_number(mut this) throws -> JsonValue {
+        // FIXME: This implementation doesn't match JsonParser.cpp
+        let is_negative = .consume_specific(b'-')
+        mut decimal_start_index: usize? = None
+
+        mut value = 0.0
+
+        while not .eof() {
+            let ch = .peek()
+            if ch == b'.' {
+                if decimal_start_index.has_value() {
+                    // FIXME: "Unexpected '.'"
+                    throw Error::from_errno(9016)
+                }
+                decimal_start_index = .index++
+                continue
+            } else if not (ch >= b'0' and ch <= b'9') {
+                break
+            }
+
+            if not decimal_start_index.has_value() {
+                value *= 10.0
+                value += char_to_f64(ch - b'0')
+            } else {
+                mut num = char_to_f64(ch - b'0')
+                // FIXME: This should really be: `value += pow(10, -decimal_place)*num`, but: there's no pow function and you can't multiply float by usize
+                let decimal_place = .index - decimal_start_index.value()
+                for i in 0..decimal_place {
+                    num /= 10.0
+                }
+                value += num
+            }
+            .index++
+        }
+
+        if is_negative {
+            value *= -1.0
+        }
+
+        return JsonValue::Number(value)
+    }
+
+    fn parse_string(mut this) throws -> JsonValue {
+        return JsonValue::JsonString(.consume_and_unescape_string())
+    }
+
+    fn parse_false(mut this) throws -> JsonValue {
+        if (.consume() != b'f' or .consume() != b'a' or .consume() != b'l' or .consume() != b's' or .consume() != b'e') {
+            // FIXME: "Expected 'false'"
+            throw Error::from_errno(9011)
+        }
+        return JsonValue::Bool(false)
+    }
+
+    fn parse_true(mut this) throws -> JsonValue {
+        if (.consume() != b't' or .consume() != b'r' or .consume() != b'u' or .consume() != b'e') {
+            // FIXME: "Expected 'true'"
+            throw Error::from_errno(9012)
+        }
+        return JsonValue::Bool(true)
+    }
+
+    fn parse_null(mut this) throws -> JsonValue {
+        if (.consume() != b'n' or .consume() != b'u' or .consume() != b'l' or .consume() != b'l') {
+            // FIXME: "Expected 'null'"
+            throw Error::from_errno(9013)
+        }
+        return JsonValue::Null
+    }
+}
+
+// fn parse_json(input: String) throws -> JsonValue {
+//     mut parser = JsonParser::construct(input)
+//     return parser.parse()
+// }
+// 
+// fn main() {
+//     let value = parse_json(input: "[{\"id\":0.5,\"displayName\":\"Air\",\"name\":\"air\",\"hardness\":3.9,\"resistance\":0,\"minStateId\":0,\"maxStateId\":0,\"states\":[]}]")
+//     println("{}", value)
+// }

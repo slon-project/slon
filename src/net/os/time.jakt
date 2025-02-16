@@ -1,0 +1,94 @@
+import extern c "time.h" {
+    extern fn time_busy(anon duration: i64)
+    extern fn time_jiffies() -> i64
+    extern fn time_now() -> i64
+    extern fn time_sleep(anon duration: i64)
+}
+
+struct Time {
+    fn busy(anon duration: i64) {
+        time_busy(duration)
+    }
+    fn jiffies() throws -> i64 {
+        return time_jiffies()
+    }
+    fn now() throws -> i64 {
+        return time_now()
+    }
+    fn cdate_to_unix(anon cdate: i64) -> i64 {
+        // (cdate - Str2Date("1/1/1970") / CDATE_FREQ + NIST_TIME_OFFSET
+        return (cdate - 3090344933588992) / 49710 + 8575
+    }
+    fn unix_to_cdate(anon unix: i64) -> i64 {
+        // (unix - NIST_TIME_OFFSET) * CDATE_FREQ + Str2Date("1/1/1970")
+        return (unix - 8575) * 49710 + 3090344933588992
+    }
+    fn sleep(anon duration: i64) {
+        time_sleep(duration)
+    }
+    fn timestamp_from_unix(anon timestamp: i64) -> String {
+
+        let SECS_PER_DAY   = 86400
+        let DAYS_PER_YEAR    = 365
+        let DAYS_PER_LYEAR   = 366
+        let DAYS_PER_LYEAR_PERIOD = 146097
+        let YEARS_PER_LYEAR_PERIOD = 400
+
+        mut days = timestamp / SECS_PER_DAY
+        mut remainder = timestamp - (days * SECS_PER_DAY)
+        if timestamp < 0 and remainder == 0 {
+            days++
+            remainder -= SECS_PER_DAY
+        }
+
+        mut cur_year = 0
+        mut months: [i64] = []
+        mut tmp_days = 0
+
+        let month_tab = [ 0,  31,  59,  90, 120, 151, 181, 212, 243, 273, 304, 334 ]
+        let month_tab_leap = [ -1,  30,  59,  90, 120, 151, 181, 212, 243, 273, 304, 334 ]
+
+    	tmp_days = days;
+    	if tmp_days >= DAYS_PER_LYEAR_PERIOD or tmp_days <= -DAYS_PER_LYEAR_PERIOD {
+    		cur_year += YEARS_PER_LYEAR_PERIOD * (tmp_days / DAYS_PER_LYEAR_PERIOD);
+    		tmp_days -= DAYS_PER_LYEAR_PERIOD * (tmp_days / DAYS_PER_LYEAR_PERIOD);
+    	}
+    	while tmp_days >= DAYS_PER_LYEAR {
+    		cur_year++;
+    		if cur_year % 4 == 0 {
+    			tmp_days -= DAYS_PER_LYEAR;
+    		} else {
+    			tmp_days -= DAYS_PER_YEAR;
+    		}
+    	}
+        if cur_year % 4 == 0 {
+            months = month_tab_leap
+        } else {
+            months = month_tab
+        }
+
+        mut i = 11
+        while i > 0 {
+            if tmp_days > months[i] {
+                break;
+            }
+            i--
+        }
+
+        let year = 1970 + cur_year
+        let month = i + 1
+        let day = tmp_days - months[i]
+
+        let hours = remainder / 3600
+        let minutes = (remainder - hours * 3600) / 60
+        let seconds = remainder % 60
+
+        mut sb = StringBuilder::create()
+        sb.clear()
+        sb.appendff("{:0>4d}-{:0>2d}-{:0>2d}T{:0>2d}:{:0>2d}:{:0>2d}.000Z", year, month, day, hours, minutes, seconds)
+        return sb.to_string()
+    }
+    fn timestamp_from_cdate(anon cdate: i64) -> String {
+        return timestamp_from_unix(cdate_to_unix(cdate))
+    }
+}

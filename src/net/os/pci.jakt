@@ -1,0 +1,103 @@
+import ioport { IOPort }
+
+import extern c "pci.h" {
+    extern fn pci_find(anon class_code: i64) -> i64
+    extern fn pci_read_u8(anon bus: i64, anon device: i64, anon fun: i64, anon offset: i64) -> u8
+    extern fn pci_read_u16(anon bus: i64, anon device: i64, anon fun: i64, anon offset: i64) -> u16
+    extern fn pci_read_u32(anon bus: i64, anon device: i64, anon fun: i64, anon offset: i64) -> u32
+    extern fn pci_write_u8(anon bus: i64, anon device: i64, anon fun: i64, anon offset: i64, anon value: u8)
+    extern fn pci_write_u16(anon bus: i64, anon device: i64, anon fun: i64, anon offset: i64, anon value: u16)
+    extern fn pci_write_u32(anon bus: i64, anon device: i64, anon fun: i64, anon offset: i64, anon value: u32)
+}
+
+struct PCIDevice {
+    bus: i64
+    device: i64
+    fun: i64
+    pci_vendor_id: u16
+    pci_device_id: u16
+    bar: [u32]
+    public fn enable_bus_master(mut this) {
+        .set_command(.command() | 0x4)
+    }
+    public fn read_u8(this, anon offset: i64) -> u8 {
+        return pci_read_u8(.bus, .device, .fun, offset)
+    }
+    public fn read_u16(this, anon offset: i64) -> u16 {
+        return pci_read_u16(.bus, .device, .fun, offset)
+    }
+    public fn read_u32(this, anon offset: i64) -> u32 {
+        return pci_read_u32(.bus, .device, .fun, offset)
+    }
+    public fn write_u8(this, offset: i64, value: u8) {
+        pci_write_u8(.bus, .device, .fun, offset, value)
+    }
+    public fn write_u16(this, offset: i64, value: u16) {
+        pci_write_u16(.bus, .device, .fun, offset, value)
+    }
+    public fn write_u32(this, offset: i64, value: u32) {
+        pci_write_u32(.bus, .device, .fun, offset, value)
+    }
+    public fn io_read_u8(this, anon offset: u16) throws -> u8 {
+        return IOPort::read_u8(.bar[0] as! u16 + offset)
+    }
+    public fn io_read_u16(this, anon offset: u16) throws -> u16 {
+        return IOPort::read_u16(.bar[0] as! u16 + offset)
+    }
+    public fn io_read_u32(this, anon offset: u16) throws -> u32 {
+        return IOPort::read_u32(.bar[0] as! u16 + offset)
+    }
+    public fn io_write_u8(this, offset: u16, value: u8) {
+        IOPort::write_u8(address: .bar[0] as! u16 + offset, value)
+    }
+    public fn io_write_u16(this, offset: u16, value: u16) {
+        IOPort::write_u16(address: .bar[0] as! u16 + offset, value)
+    }
+    public fn io_write_u32(this, offset: u16, value: u32) {
+        IOPort::write_u32(address: .bar[0] as! u16 + offset, value)
+    }
+    public fn vendor_id(this) -> u16 {
+        return .pci_vendor_id
+    }
+    public fn device_id(this) -> u16 {
+        return .pci_device_id
+    }
+    public fn command(this) -> u16 {
+        return pci_read_u16(.bus, .device, .fun, 0x4)
+    }
+    public fn set_command(this, anon value: u16) {
+        pci_write_u16(.bus, .device, .fun, offset: 0x4, value)
+    }
+    public fn status(this) -> u16 {
+        return pci_read_u16(.bus, .device, .fun, 0x6)
+    }
+}
+
+fn lookup_bar(bus: i64, device: i64, fun: i64, anon index: i64) -> u32 {
+    if index < 0 or index > 5 {
+        return 0xFFFFFFFF
+    }
+    return pci_read_u32(bus, device, fun, 0x10 + (index * 4)) & 0xFFFFFFFC
+}
+
+struct PCI {
+    public fn find_device_by_class_code(anon class_code: i64) throws -> PCIDevice {
+        let result = pci_find(class_code)
+
+        if result < 0 {
+            eprintln("error: device not found")
+            throw Error::from_errno(1)
+        }
+
+        let bus = (result >> 16) & 0xff
+        let device = (result >> 8) & 0xff 
+        let fun = result & 0xff
+        let pci_vendor_id = pci_read_u16(bus, device, fun, 0x0)
+        let pci_device_id = pci_read_u16(bus, device, fun, 0x2)
+        mut bar: [u32] = []
+        for i in 0..5 {
+            bar.push(lookup_bar(bus, device, fun, i))
+        }
+        return PCIDevice(bus, device, fun, pci_vendor_id, pci_device_id, bar)
+    }
+}

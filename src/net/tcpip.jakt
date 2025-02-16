@@ -1,0 +1,1671 @@
+import lib::util { Util }
+
+import os::os { OS }
+import os::time { Time }
+
+struct IcmpRequest {
+  host: u64
+  identifier: u64
+  sequence_number: u64
+  response_type_pointer: u64
+}
+
+enum TcpSessionState: i64 {
+    Idle = 0
+    Established = 1
+    Closed = 2
+    Connecting = 4
+}
+
+struct TcpSession {
+    local_mac: [u8]
+    remote_mac: [u8]
+    local_address: [u8]
+    remote_address: [u8]
+    local_port: u16
+    remote_port: u16
+    local_sequence_number: u32
+    acknowledgement_number: u32
+    timestamp_last_echo_reply: u32
+    timestamp_last_jiffies: i64
+    timestamp_origin: i64
+    last_window_size: u16
+    last_tx_sequence_number: u32
+    last_tx_was_acked: bool
+    tx_chunk_counter: i64
+    state: TcpSessionState
+    pending_data_to_transmit: [u8]
+    received_data: [u8]
+    received_frames: [[u8]]
+    socket: u64
+}
+
+enum TcpBindError: u64 {
+    BadRequest = 1
+    SocketIsAlreadyBound = 2
+}
+
+class TCPIP {
+    public ipv4_address: [u8]
+    public ipv4_netmask: [u8]
+    public ipv4_network: [u8]
+    public ipv4_gateway: [u8]
+    public dns_server_address: [u8]
+    public dns_server_port: u16
+    public mss_size: u16
+    public tx_queue: [[u8]]
+    public ttl: u8
+    public arp_cache: [String:[u8]]
+    public bound_sockets: [u16:u64]
+    public dns_cache: [String:[u8]]
+    public tcp_sessions: [TcpSession]
+    public pending_dns_lookups: [u16:u64]
+    public pending_dns_cached_entries: [u16:String]
+    public pending_icmp_requests: [u16:u64]
+    public timestamp_last_arp_request: i64
+    public rx_bytes: u64
+    public rx_frames: u64
+    public tx_bytes: u64
+    public tx_frames: u64
+    fn calculate_header_checksum(this, anon mut packet: [u8], offset: i64, count: i64) -> u16 {
+        mut sum: i64 = 0
+        for i in 0..count {
+            if (i & 1) == 1 {
+                sum += packet[offset + i] as! i64
+            } else {
+                sum += (packet[offset + i] as! i64 * 256)
+            }
+        }
+        mut calculated_checksum: u16 = 0
+        let overflowable_checksum: i64 = (sum & 0xffff) + (sum >> 16)
+        if overflowable_checksum < 65536 {
+            calculated_checksum = ~((sum & 0xffff) as! u16 + (sum >> 16) as! u16)
+        } else {
+            calculated_checksum = ~(unchecked_add <u16>((sum & 0xffff) as! u16, (sum >> 16) as! u16)) - 1
+        }
+        return calculated_checksum
+    }
+    fn push_ethernet_header(this, mut packet: [u8], destination_mac: [u8], source_mac: [u8], ethertype: u16) throws {
+        for i in 0..6 {
+            packet.push(destination_mac[i])
+        }
+        for i in 0..6 {
+            packet.push(source_mac[i])
+        }
+        Util::push_u16_to_u8_array(packet, ethertype)
+    }
+    fn push_arp_packet(this, mut packet: [u8], opcode: u16, sender_mac: [u8], sender_ipv4: [u8], target_mac: [u8], target_ipv4: [u8]) throws {
+        let hardware_protocol_header_data: [u8] = [0x00, 0x01, 0x08, 0x00, 0x06, 0x04]
+        for i in 0..6 {
+            packet.push(hardware_protocol_header_data[i])
+        }
+        Util::push_u16_to_u8_array(packet, opcode)
+        for i in 0..6 {
+            packet.push(sender_mac[i])
+        }
+        for i in 0..4 {
+            packet.push(sender_ipv4[i])
+        }
+        for i in 0..6 {
+            packet.push(target_mac[i])
+        }
+        for i in 0..4 {
+            packet.push(target_ipv4[i])
+        }        
+    }
+    fn push_ipv4_header(this, mut packet: [u8], total_length: u16, flags: u8, protocol: u8, source_address: [u8], destination_address: [u8]) throws {
+        packet.push(0x45u8) // version & header length
+        packet.push(0x00u8) // differentiated services field
+        Util::push_u16_to_u8_array(packet, total_length) // total length of entire packet
+        let identification: u64 = OS::random() & 0xffff
+        Util::push_u16_to_u8_array(packet, identification as! u16)
+        packet.push(flags)
+        packet.push(0x00u8) // fragment size (unused)
+        packet.push(.ttl) // time-to-live
+        packet.push(protocol) // protocol number
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Checksum placeholder
+        for i in 0..4 {
+            packet.push(source_address[i])
+        }
+        for i in 0..4 {
+            packet.push(destination_address[i])
+        }
+        let checksum = .calculate_header_checksum(packet, offset: 14, count: 20)
+        packet[24] = (checksum >> 8) as! u8
+        packet[25] = (checksum & 0xff) as! u8        
+    }
+    fn push_udp_header(this, mut packet: [u8], source_port: u16, destination_port: u16, length: i64) throws {
+        Util::push_u16_to_u8_array(packet, source_port)
+        Util::push_u16_to_u8_array(packet, destination_port)
+        Util::push_u16_to_u8_array(packet, length as! u16)
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Checksum placeholder
+    }
+    fn send_arp_reply(mut this, anon mac_address: [u8], anon sender_mac_address: [u8], anon sender_ipv4_address: [u8]) throws {
+        mut packet: [u8] = []
+        .push_ethernet_header(packet, destination_mac: sender_mac_address, source_mac: mac_address, ethertype: 0x0806)
+        .push_arp_packet(
+            packet
+            opcode: 0x0002
+            sender_mac: mac_address
+            sender_ipv4: .ipv4_address
+            target_mac: sender_mac_address
+            target_ipv4: sender_ipv4_address
+        )
+        .tx_queue.push(packet)
+    }
+    public fn send_arp_request(mut this, anon mac_address: [u8], anon target_ipv4_address: [u8]) throws {
+        if .timestamp_last_arp_request > 0 and (.timestamp_last_arp_request + 5000) > Time::jiffies() {
+            return
+        }
+        mut packet: [u8] = []
+        .push_ethernet_header(packet, destination_mac: [0xff, 0xff, 0xff, 0xff, 0xff, 0xff], source_mac: mac_address, ethertype: 0x0806)
+        .push_arp_packet(
+            packet
+            opcode: 0x0001
+            sender_mac: mac_address
+            sender_ipv4: .ipv4_address
+            target_mac: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            target_ipv4: target_ipv4_address
+        )
+        .tx_queue.push(packet)
+        .timestamp_last_arp_request = Time::jiffies()
+    }
+    fn insert_arp_cache_entry(mut this, ipv4_address: [u8], mac_address: [u8]) throws {
+        .arp_cache[Util::get_hexadecimal_string_from_ipv4_u8_array(ipv4_address)] = mac_address
+    }
+    public fn process_arp_packet(mut this, anon mac_address: [u8], anon frame: [u8]) throws {
+        let arp_packet = frame[14..]
+
+        let hardware_type = Util::get_u16_from_u8_arrayslice(arp_packet, 0)
+        let protocol_type = Util::get_u16_from_u8_arrayslice(arp_packet, 2)
+        let hardware_size = arp_packet[4]
+        let protocol_size = arp_packet[5]
+        let opcode = Util::get_u16_from_u8_arrayslice(arp_packet, 6)
+
+        let sender_mac_address: [u8] = [arp_packet[8], arp_packet[9], arp_packet[10], 
+            arp_packet[11], arp_packet[12], arp_packet[13]]
+        let sender_ipv4_address: [u8] = [arp_packet[14], arp_packet[15], arp_packet[16], arp_packet[17]] 
+
+        let target_mac_address: [u8] = [arp_packet[18], arp_packet[19], arp_packet[20], 
+            arp_packet[21], arp_packet[22], arp_packet[23]]
+        let target_ipv4_address: [u8] = [arp_packet[24], arp_packet[25], arp_packet[26], arp_packet[27]] 
+
+        // If any of these mismatch, the packet is invalid
+        if hardware_type != 0x0001 or protocol_type != 0x0800 or 
+            hardware_size != 6 or protocol_size != 4 {
+                return
+        }
+
+        // Add the sender to ARP cache
+        .insert_arp_cache_entry(ipv4_address: sender_ipv4_address, mac_address: sender_mac_address)
+        //print("Updated ARP cache entry for {}: ", sender_ipv4_address)
+        //for i in 0..6 {
+        //    print("{:0>2x}", sender_mac_address[i])
+        //    if (i < 5) {
+        //        print(":")
+        //    }
+        //}
+        //println(" ")
+
+        match opcode {
+            1 => {
+                // ARP request, check if our ipv4 address matches
+                for i in 0..4 {
+                    if .ipv4_address[i] != target_ipv4_address[i] {
+                        // doesn't match, break
+                        break
+                    }
+                }
+                // matches, send ARP reply
+                .send_arp_reply(mac_address, sender_mac_address, sender_ipv4_address)
+            }
+            else => {
+                // unsupported opcode, ignore
+            }
+        }
+    }
+    public fn send_dns_query(mut this, anon mac_address: [u8], anon query: String, anon pointer_to_u32: u64) throws {
+
+        mut cached_result: u32 = 0
+        if .dns_cache.contains(query) {
+            cached_result += (.dns_cache[query][0] as! u32 * (256 * 256 * 256) as! u32)
+            cached_result += (.dns_cache[query][1] as! u32 * (256 * 256) as! u32)
+            cached_result += (.dns_cache[query][2] as! u32 * 256 as! u32)
+            cached_result += .dns_cache[query][3] as! u32
+            unsafe {
+                cpp {
+                    "u32 *r = (u32*)pointer_to_u32;
+                    r[0] = cached_result;"
+                }
+            }
+            return
+        }
+
+        mut packet: [u8] = []
+        mut dns_packet: [u8] = []
+        
+        let transaction_id: u64 = OS::random() & 0xffff
+        Util::push_u16_to_u8_array(dns_packet, transaction_id as! u16)
+
+        .pending_dns_lookups.set(transaction_id as! u16, pointer_to_u32)
+        .pending_dns_cached_entries.set(transaction_id as! u16, query)
+
+        let dns_header_data: [u8] = [0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        dns_packet.push_values(&dns_header_data)
+
+        let segments = query.split(c'.')
+        for segment in segments {
+            dns_packet.push(segment.length() as! u8)
+            //println("segment_length: {} bytes", segment.length())
+            unsafe {
+                cpp {
+                    "const char *raw_string = segment.characters();
+                    for (int i = 0; i < segment.length(); i++)
+                        dns_packet.push(raw_string[i]);"
+                }
+            }
+        }
+        dns_packet.push(0x00u8)
+
+        let dns_footer_data: [u8] = [0x00, 0x01, 0x00, 0x01]
+        dns_packet.push_values(&dns_footer_data)
+
+        let source_port: u16 = (OS::random() & 0xffff) as! u16
+        let destination_port: u16 = .dns_server_port
+
+        let destination_mac = .arp_cache[Util::get_hexadecimal_string_from_ipv4_u8_array(.ipv4_gateway)]
+        .push_ethernet_header(packet, destination_mac, source_mac: mac_address, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length: 28 + dns_packet.size() as! u16, flags: 0x00, protocol: 0x11, source_address: .ipv4_address, destination_address: .dns_server_address)
+        .push_udp_header(packet, source_port, destination_port, length: 8 + dns_packet.size() as! i64)
+
+        packet.push_values(&dns_packet)
+
+        // Calculate UDP checksum
+
+        mut checksum_packet: [u8] = []
+        // Source and destination IP
+        for i in 26..34 {
+            checksum_packet.push(packet[i])
+        }
+        // Protocol
+        checksum_packet.push(0x00u8)
+        checksum_packet.push(0x11u8)
+        // UDP Packet length
+        let udp_packet_length: u16 = 8 + dns_packet.size() as! u16
+        Util::push_u16_to_u8_array(checksum_packet, udp_packet_length)
+        // Source Port
+        Util::push_u16_to_u8_array(checksum_packet, source_port)
+        // Destination port
+        Util::push_u16_to_u8_array(checksum_packet, destination_port)
+        // UDP Packet length (again)
+        Util::push_u16_to_u8_array(checksum_packet, udp_packet_length)
+        // Data
+        checksum_packet.push_values(&dns_packet)
+
+        let checksum = .calculate_header_checksum(checksum_packet, offset: 0, count: checksum_packet.size() as! i64)
+        packet[40] = (checksum >> 8) as! u8
+        packet[41] = (checksum & 0xff) as! u8        
+
+        .tx_queue.push(packet)
+
+    }
+    public fn netinfo_process_client_request(mut this, anon mac_address: [u8]) throws {
+        unsafe {
+            cpp {
+                "u64 *request = (u64*)0x300030;
+                if (*request) {
+                    int i = 0;
+                    u64 *r = (u64*)*request;
+
+                    for (i = 0; i < 6; i++) {
+                        r[0] = (r[0] << 8) | mac_address[i];
+                        if (i < 4) {
+                            r[1] = (r[1] << 8) | this->ipv4_address[i];
+                            r[2] = (r[2] << 8) | this->ipv4_netmask[i];
+                            r[3] = (r[3] << 8) | this->ipv4_network[i];
+                            r[4] = (r[4] << 8) | this->ipv4_gateway[i];
+                            r[5] = (r[5] << 8) | this->dns_server_address[i];
+                        }
+                    }
+
+                    r[6] = this->dns_server_port;
+
+                    r[7] = this->rx_bytes;
+                    r[8] = this->rx_frames;
+                    r[9] = this->tx_bytes;
+                    r[10] = this->tx_frames;
+
+                    u32 *p = (u32*)r[11];
+                    p[0] = 1; // pointer_to_u32
+
+                    *request = 0;
+                }"
+            }
+        }
+    }
+
+    public fn icmp_process_client_request(mut this, anon mac_address: [u8]) throws {
+        mut did_receive_request = false
+        mut destination_mac: [u8] = []
+        mut addr: u32 = 0
+        mut iden: u64 = 0
+        mut seq: u64 = 0
+        mut pointer_to_u32: u64 = 0
+        unsafe {
+            cpp {
+                "u64 *ls_request = (u64*)0x300020;
+                if (*ls_request) {
+                    u64 *ls_r = (u64*)*ls_request;
+                    addr = ls_r[0];
+                }"
+            }
+        }
+        // FIXME: This will crash if we 1) Ping a host on the local subnet that does not exist, then 2) subsequently ping the gateway.
+        if (addr > 0) {
+            mut remote_address_hex_string = Util::get_hexadecimal_string_from_ipv4_u8_array(.ipv4_gateway)
+            if addr != Util::get_address_u32_from_ipv4_u8_array(.ipv4_gateway) {
+                if .is_local_ipv4_address(Util::get_ipv4_u8_array_from_address_u32(addr)) {
+                    remote_address_hex_string = Util::get_hexadecimal_string_from_ipv4_u8_array(Util::get_ipv4_u8_array_from_address_u32(addr))
+                    if not .arp_cache.contains(remote_address_hex_string) {
+                        // send arp request
+                        //println("send arp request for: {}", remote_address_hex_string)
+                        .send_arp_request(mac_address, Util::get_ipv4_u8_array_from_address_u32(addr))
+                        return
+                    }
+                }
+            }
+            destination_mac = .arp_cache[remote_address_hex_string]
+        } else {
+            return
+        }
+        unsafe {
+            cpp {
+                "u64 *request = (u64*)0x300020;
+                if (*request) {
+                    did_receive_request = true;
+                    u64 *r = (u64*)*request;
+                    addr = r[0];
+                    iden = r[1];
+                    seq = r[2];
+                    pointer_to_u32 = r[3];
+                    *request = 0;
+                }"
+            }
+        }
+        if (did_receive_request) {
+            .send_icmp_request(mac_address, destination_mac, addr, iden, seq, pointer_to_u32)
+            did_receive_request = false
+        }
+    }
+
+    public fn dns_process_client_request(mut this, anon mac_address: [u8]) throws {
+        mut did_receive_request = false
+        mut request_is_ipv4_address = true
+        mut s = StringBuilder::create()
+        mut pointer_to_u32: u64 = 0
+        unsafe {
+            cpp {
+                "u64 *request = (u64*)0x300010;
+                if (*request) {
+                    did_receive_request = true;
+                    u64 *r = (u64*)*request;
+
+                    char const *chars = (char const*)r[0];
+                    s.append_c_string(chars);
+                    for (int i = 0; i < s.to_string().length(); i++)
+                        if ((chars[i] < '0' || chars[i] > '9') && chars[i] != '.')
+                            request_is_ipv4_address = false;
+                    delete(chars);
+
+                    pointer_to_u32 = r[1];
+
+                    *request = 0;
+                }"
+            }
+        }
+        if (did_receive_request) {
+            if (request_is_ipv4_address) {
+                let octets = s.to_string().split(c'.')
+                mut u32_address: u32 = 0
+                u32_address += octets[3].to_number<u32>().value()
+                u32_address += octets[2].to_number<u32>().value() << 8
+                u32_address += octets[1].to_number<u32>().value() << 16
+                u32_address += octets[0].to_number<u32>().value() << 24
+                unsafe {
+                    cpp {
+                        "u32 *r = (u32*)pointer_to_u32;
+                        r[0] = u32_address;"
+                    }
+                }
+            } else {
+                .send_dns_query(mac_address, s.to_string(), pointer_to_u32)
+            }
+            did_receive_request = false
+        }
+    }
+    fn send_icmp_request(mut this, anon mac_address: [u8], anon destination_mac: [u8], anon addr: u32, anon iden: u64, anon seq: u64, anon pointer_to_u32: u64) throws {
+        mut packet: [u8] = []
+
+        mut destination_address: [u8] = []
+        Util::push_u32_to_u8_array(destination_address, addr)
+
+        .pending_icmp_requests.set(iden as! u16, pointer_to_u32)
+
+        let total_length: u16 = 84
+
+        .push_ethernet_header(packet, destination_mac, source_mac: mac_address, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length, flags: 0x40, protocol: 0x01, source_address: .ipv4_address, destination_address)
+
+        packet.push(0x08u8) // type
+        for i in 0..3 {
+            packet.push(0x00u8) // code, checksum placeholder
+        }
+
+        Util::push_u16_to_u8_array(packet, iden as! u16)
+        Util::push_u16_to_u8_array(packet, seq as! u16)
+
+        for i in 0..8 {
+            packet.push(0x00u8) // FIXME: timestamp
+        }
+
+        mut ch: u8 = 0x20
+        for i in 0..48 {
+            packet.push(ch) // data
+            ch++
+        }
+
+        let checksum = .calculate_header_checksum(packet, offset: 34, count: packet.size() as! i64 - 34)
+        packet[36] = (checksum >> 8) as! u8
+        packet[37] = (checksum & 0xff) as! u8
+
+        .tx_queue.push(packet)
+    }
+    fn process_icmp_reply(mut this, anon frame: [u8]) throws {
+        let iden = Util::get_u16_from_u8_array(frame, 38)
+        let ttl: u16 = frame[22] as! u16
+        let payload_size: u16 = Util::get_u16_from_u8_array(frame, 16) - 20
+        mut result: u32 = 0
+        result = (payload_size as! u32) << 16
+        result += ttl as! u32
+        mut pointer_to_u32: u64 = 0
+        if .pending_icmp_requests.contains(iden) {
+            pointer_to_u32 = .pending_icmp_requests[iden]
+        }
+        if pointer_to_u32 > 0 {
+            unsafe {
+                cpp {
+                    "u32 *r = (u32*)pointer_to_u32;
+                    r[0] = result;"
+                }
+            }
+        }
+    }
+    fn send_icmp_reply(mut this, anon mac_address: [u8], anon frame: [u8]) throws {
+        mut packet: [u8] = []
+        let ipv4_packet = frame[14..]
+        let icmp_packet = frame[34..]
+
+        mut destination_mac: [u8] = []
+        for octet in frame[6..12] {
+            destination_mac.push(octet)
+        }
+        mut destination_address: [u8] = []
+        for octet in ipv4_packet[12..16] {
+            destination_address.push(octet)
+        }
+
+        .push_ethernet_header(packet, destination_mac, source_mac: mac_address, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length: frame.size() as! u16 - 14, flags: 0x40, protocol: 0x01, source_address: .ipv4_address, destination_address)
+
+        for i in 0..4 {
+            packet.push(0x00u8) // type, code, checksum placeholder
+        }
+        for i in 4..8 {
+            packet.push(icmp_packet[i]) // identifier & sequence number
+        }
+        for i in 8..icmp_packet.size() {
+            packet.push(icmp_packet[i]) // data
+        }
+        let checksum = .calculate_header_checksum(packet, offset: 34, count: packet.size() as! i64 - 34)
+        packet[36] = (checksum >> 8) as! u8
+        packet[37] = (checksum & 0xff) as! u8
+
+        .tx_queue.push(packet)
+    }
+    public fn process_icmp_packet(mut this, anon mac_address: [u8], anon frame: [u8]) throws {
+        let icmp_packet = frame[34..]
+
+        let type = icmp_packet[0]
+        let code = icmp_packet[1]
+        let checksum: u16 = Util::get_u16_from_u8_arrayslice(icmp_packet, 2)
+        let identifier: u16 = Util::get_u16_from_u8_arrayslice(icmp_packet, 4)
+        let sequence_number: u16 = Util::get_u16_from_u8_arrayslice(icmp_packet, 6)
+
+        match type {
+            0 => {
+                // ICMP reply
+                .process_icmp_reply(frame)
+            }
+            8 => {
+                // ICMP request, send ICMP reply
+                .send_icmp_reply(mac_address, frame)
+            }
+            else => {
+                // unsupported
+            }
+        }
+    }
+    fn tcp_is_fin(this, flags: u16) -> bool {
+        if (flags & 1) == 1 { 
+            return true
+        }
+        return false
+    }
+    fn tcp_is_syn(this, flags: u16) -> bool {
+        if (flags & 2) == 2 { 
+            return true
+        }
+        return false
+    }
+    fn tcp_is_reset(this, flags: u16) -> bool {
+        if (flags & 4) == 4 { 
+            return true
+        }
+        return false
+    }
+    fn tcp_is_push(this, flags: u16) -> bool {
+        if (flags & 8) == 8 { 
+            return true
+        }
+        return false
+    }
+    fn tcp_is_ack(this, flags: u16) -> bool {
+        if (flags & 16) == 16 { 
+            return true
+        }
+        return false
+    }
+    fn tcp_is_urgent(this, flags: u16) -> bool {
+        if (flags & 32) == 32 { 
+            return true
+        }
+        return false
+    }
+    fn tcp_syn_packet(mut this, anon mut session: TcpSession) throws {
+        mut packet: [u8] = []
+
+        let header_length: u16 = 40
+        let flags: u16 = 0xa002 // SYN
+
+        mut ipv4_total_length: u16 = 0
+        ipv4_total_length += 20; // IPv4
+        ipv4_total_length += header_length as! u16 // TCP
+
+        .push_ethernet_header(packet, destination_mac: session.remote_mac, source_mac: session.local_mac, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length: ipv4_total_length, flags: 0x40, protocol: 0x06, source_address: session.local_address, destination_address: session.remote_address)
+
+        // FIXME: put this into .push_tcp_header
+
+        Util::push_u16_to_u8_array(packet, session.local_port)
+        Util::push_u16_to_u8_array(packet, session.remote_port)
+        Util::push_u32_to_u8_array(packet, session.local_sequence_number)
+        Util::push_u32_to_u8_array(packet, 0 as! u32) // Acknowledgement number
+        Util::push_u16_to_u8_array(packet, flags)
+        Util::push_u16_to_u8_array(packet, session.last_window_size)
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Checksum placeholder
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Urgent pointer
+
+        mut tcp_options: [u8] = [0x02, 0x04]
+        Util::push_u16_to_u8_array(tcp_options, .mss_size)
+        Util::push_u32_to_u8_array(tcp_options, 0x0101080a)
+        packet.push_values(&tcp_options)
+        let timestamp: u32 = (session.timestamp_origin + (Time::jiffies() - session.timestamp_origin)) as! u32
+        Util::push_u32_to_u8_array(packet, timestamp)
+        Util::push_u32_to_u8_array(packet, session.timestamp_last_echo_reply)
+
+        packet.push(0x01u8)
+        packet.push(0x03u8)
+        packet.push(0x03u8)
+        packet.push(0x07u8)
+
+        // Calculate TCP checksum
+
+        mut checksum_packet: [u8] = []
+        // Source and destination IP
+        for i in 26..34 {
+            checksum_packet.push(packet[i])
+        }
+        // Protocol
+        checksum_packet.push(0x00u8)
+        checksum_packet.push(0x06u8)
+        // TCP Packet length
+        let tcp_packet_length: u16 = header_length as! u16
+        Util::push_u16_to_u8_array(checksum_packet, tcp_packet_length)
+
+        for i in 34..packet.size() {
+            checksum_packet.push(packet[i])
+        }
+
+        mut checksum = .calculate_header_checksum(checksum_packet, offset: 0, count: checksum_packet.size() as! i64)
+        packet[50] = (checksum >> 8) as! u8
+        packet[51] = (checksum & 0xff) as! u8
+
+        .tx_queue.push(packet)
+
+    }
+    fn tcp_psh_packet(mut this, anon mut session: TcpSession) throws {
+        mut packet: [u8] = []
+
+        let header_length: u16 = 32
+        let flags: u16 = 0x8018 // PSH, ACK
+
+        let maximum_payload_size_to_transmit: i64 = 1024
+        mut payload_size: i64 = maximum_payload_size_to_transmit
+        let payload_offset: i64 = session.tx_chunk_counter * maximum_payload_size_to_transmit
+        if session.pending_data_to_transmit.size() as! i64 - payload_offset < maximum_payload_size_to_transmit {
+            payload_size = session.pending_data_to_transmit.size() as! i64 - payload_offset
+        }
+
+        mut ipv4_total_length: u16 = 0
+        ipv4_total_length += 20; // IPv4
+        ipv4_total_length += header_length + payload_size as! u16 // TCP
+
+        .push_ethernet_header(packet, destination_mac: session.remote_mac, source_mac: session.local_mac, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length: ipv4_total_length, flags: 0x40, protocol: 0x06, source_address: session.local_address, destination_address: session.remote_address)
+
+
+        // FIXME: put this into .push_tcp_header
+
+        Util::push_u16_to_u8_array(packet, session.local_port)
+        Util::push_u16_to_u8_array(packet, session.remote_port)
+        Util::push_u32_to_u8_array(packet, session.local_sequence_number)
+        Util::push_u32_to_u8_array(packet, session.acknowledgement_number)
+        Util::push_u16_to_u8_array(packet, flags)
+        Util::push_u16_to_u8_array(packet, session.last_window_size)
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Checksum placeholder
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Urgent pointer
+
+        mut tcp_options: [u8] = [0x01, 0x01, 0x08, 0x0a]
+        packet.push_values(&tcp_options)
+
+        let timestamp: u32 = (session.timestamp_origin + (Time::jiffies() - session.timestamp_origin)) as! u32
+        Util::push_u32_to_u8_array(packet, timestamp)
+        Util::push_u32_to_u8_array(packet, session.timestamp_last_echo_reply)
+
+        for i in payload_offset..(payload_offset + payload_size) {
+            packet.push(session.pending_data_to_transmit[i])
+        }
+
+        // Calculate TCP checksum
+
+        mut checksum_packet: [u8] = []
+        // Source and destination IP
+        for i in 26..34 {
+            checksum_packet.push(packet[i])
+        }
+        // Protocol
+        checksum_packet.push(0x00u8)
+        checksum_packet.push(0x06u8)
+        // TCP Packet length
+        let tcp_packet_length: u16 = header_length + payload_size as! u16
+        Util::push_u16_to_u8_array(checksum_packet, tcp_packet_length)
+
+        for i in 34..packet.size() {
+            checksum_packet.push(packet[i])
+        }
+
+        mut checksum = .calculate_header_checksum(checksum_packet, offset: 0, count: checksum_packet.size() as! i64)
+        packet[50] = (checksum >> 8) as! u8
+        packet[51] = (checksum & 0xff) as! u8
+
+        .tx_queue.push(packet)
+
+    }
+    public fn tcp_transmit_pending_data_for_existing_sessions(mut this) throws {
+        for i in 0..this.tcp_sessions.size() {
+            if .tcp_sessions[i].pending_data_to_transmit.size() > 0 {
+                if (.tcp_sessions[i].tx_chunk_counter == 0) or (.tcp_sessions[i].tx_chunk_counter > 0 and .tcp_sessions[i].last_tx_was_acked) {
+                    let maximum_payload_size_to_transmit: i64 = 1024
+                    let payload_offset: i64 = .tcp_sessions[i].tx_chunk_counter * maximum_payload_size_to_transmit
+                    mut truncated_packet: [u8] = []
+                    .tcp_psh_packet(.tcp_sessions[i])
+                    if (.tcp_sessions[i].pending_data_to_transmit.size() as! i64 - payload_offset >= maximum_payload_size_to_transmit) {
+                        .tcp_sessions[i].last_tx_sequence_number = .tcp_sessions[i].local_sequence_number + maximum_payload_size_to_transmit as! u32
+                        .tcp_sessions[i].last_tx_was_acked = false
+                        .tcp_sessions[i].tx_chunk_counter++
+                    } else {
+                        // We have transmitted all of the pending data.
+                        .tcp_sessions[i].pending_data_to_transmit.shrink(0)
+                        .tcp_sessions[i].last_tx_sequence_number = 0
+                        .tcp_sessions[i].last_tx_was_acked = false
+                        .tcp_sessions[i].tx_chunk_counter = 0
+                    }
+                }
+            }
+        }
+    }
+    fn tcp_ack_packet(mut this, anon mut session: TcpSession, anon frame: [u8], mut flags: u16) throws -> u32 {
+        mut packet: [u8] = []
+
+        let syn_ipv4_packet = frame[14..]
+        let syn_tcp_packet = frame[34..]
+
+        // Swap source/destination ports
+        mut destination_port: u16 = Util::get_u16_from_u8_arrayslice(syn_tcp_packet, 0)
+        mut source_port: u16 = Util::get_u16_from_u8_arrayslice(syn_tcp_packet, 2)
+
+        let header_length: u16 = ((syn_tcp_packet[12] as! u16) >> 4) * 4
+
+        flags += ((header_length / 4) << 12)
+        flags |= 16 // ACK
+
+        mut sequence_number: u32 = session.local_sequence_number
+        mut acknowledgement_number: u32 = 0
+        for i in 0..4 {
+            acknowledgement_number += (syn_tcp_packet[7 - i] as! u32) * match i {
+                1 => 256 as! u32
+                2 => (256 * 256) as! u32
+                3 => (256 * 256 * 256) as! u32
+                else => 1 as! u32
+            }
+        }
+
+        if (.tcp_is_syn(flags) or .tcp_is_fin(flags)) {
+            acknowledgement_number += 1
+        }
+        if (.tcp_is_push(flags)) {
+            // advance ACK by number of bytes
+            flags -= 8
+        }
+        acknowledgement_number += (syn_tcp_packet.size() as! u32 - header_length as! u32)
+
+        let window_size: u16 = 0xffff
+        let urgent_pointer: u16 = Util::get_u16_from_u8_arrayslice(syn_tcp_packet, 18)
+
+        mut destination_mac: [u8] = []
+        for octet in frame[6..12] {
+            destination_mac.push(octet)
+        }
+        mut destination_address: [u8] = []
+        for octet in syn_ipv4_packet[12..16] {
+            destination_address.push(octet)
+        }
+
+        mut ipv4_total_length: u16 = 0
+        ipv4_total_length += 20; // IPv4
+        ipv4_total_length += header_length // TCP
+
+        .push_ethernet_header(packet, destination_mac, source_mac: session.local_mac, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length: ipv4_total_length, flags: 0x40, protocol: 0x06, source_address: .ipv4_address, destination_address)
+
+        // FIXME: put this into .push_tcp_header
+
+        Util::push_u16_to_u8_array(packet, source_port)
+        Util::push_u16_to_u8_array(packet, destination_port)
+        Util::push_u32_to_u8_array(packet, sequence_number)
+        Util::push_u32_to_u8_array(packet, acknowledgement_number)
+        Util::push_u16_to_u8_array(packet, flags)
+        Util::push_u16_to_u8_array(packet, window_size)
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Checksum placeholder
+        Util::push_u16_to_u8_array(packet, urgent_pointer)
+
+        mut tcp_options_offset = 20
+        mut tcp_option_length = 0
+        while tcp_options_offset < header_length as! i64 {
+            match syn_tcp_packet[tcp_options_offset] {
+                0u8 => {
+                    packet.push(0u8)
+                    tcp_options_offset++
+                }
+                1u8 => {
+                    packet.push(1u8)
+                    tcp_options_offset++
+                }
+                8u8 => {
+                    packet.push(8u8)
+                    packet.push(10u8)
+                    let timestamp: u32 = (session.timestamp_origin + (Time::jiffies() - session.timestamp_origin)) as! u32
+                    Util::push_u32_to_u8_array(packet, timestamp)
+                    Util::push_u32_to_u8_array(packet, session.timestamp_last_echo_reply)
+                    tcp_options_offset += 10
+                }
+                else => {
+                    packet.push(syn_tcp_packet[tcp_options_offset])
+                    packet.push(syn_tcp_packet[tcp_options_offset + 1])
+                    tcp_option_length = syn_tcp_packet[tcp_options_offset + 1] as! i64
+                    for i in 2..tcp_option_length {
+                        packet.push(syn_tcp_packet[tcp_options_offset + i])
+                    }
+                    tcp_options_offset += tcp_option_length
+                }
+            }
+        }
+
+        // Calculate TCP checksum
+
+        mut checksum_packet: [u8] = []
+        // Source and destination IP
+        for i in 26..34 {
+            checksum_packet.push(packet[i])
+        }
+        // Protocol
+        checksum_packet.push(0x00u8)
+        checksum_packet.push(0x06u8)
+        // TCP Packet length
+        let tcp_packet_length: u16 = 40 as! u16
+        Util::push_u16_to_u8_array(checksum_packet, tcp_packet_length)
+
+        for i in 34..packet.size() {
+            checksum_packet.push(packet[i])
+        }
+
+        mut checksum = .calculate_header_checksum(checksum_packet, offset: 0, count: checksum_packet.size() as! i64)
+        if (not .tcp_is_syn(flags)) {
+            checksum += 8
+        }
+        packet[50] = (checksum >> 8) as! u8
+        packet[51] = (checksum & 0xff) as! u8        
+
+        .tx_queue.push(packet)
+        return acknowledgement_number
+
+    }
+    fn tcp_synack_ack_packet(mut this, anon mut session: TcpSession, anon frame: [u8], mut flags: u16) throws -> u32 {
+        mut packet: [u8] = []
+
+        let syn_ipv4_packet = frame[14..]
+        let syn_tcp_packet = frame[34..]
+
+        // Swap source/destination ports
+        mut destination_port: u16 = Util::get_u16_from_u8_arrayslice(syn_tcp_packet, 0)
+        mut source_port: u16 = Util::get_u16_from_u8_arrayslice(syn_tcp_packet, 2)
+
+        let header_length: u16 = (20 + 12) as! u16
+
+        flags += ((header_length / 4) << 12)
+        flags |= 16 // ACK
+
+        mut sequence_number: u32 = session.local_sequence_number
+        mut acknowledgement_number: u32 = 0
+        for i in 0..4 {
+            acknowledgement_number += (syn_tcp_packet[7 - i] as! u32) * match i {
+                1 => 256 as! u32
+                2 => (256 * 256) as! u32
+                3 => (256 * 256 * 256) as! u32
+                else => 1 as! u32
+            }
+        }
+
+        acknowledgement_number += 1
+
+        let window_size: u16 = 0xffff
+        let urgent_pointer: u16 = Util::get_u16_from_u8_arrayslice(syn_tcp_packet, 18)
+
+        mut destination_mac: [u8] = []
+        for octet in frame[6..12] {
+            destination_mac.push(octet)
+        }
+        mut destination_address: [u8] = []
+        for octet in syn_ipv4_packet[12..16] {
+            destination_address.push(octet)
+        }
+
+        mut ipv4_total_length: u16 = 0
+        ipv4_total_length += 20; // IPv4
+        ipv4_total_length += header_length // TCP
+
+        .push_ethernet_header(packet, destination_mac, source_mac: session.local_mac, ethertype: 0x0800)
+        .push_ipv4_header(packet, total_length: ipv4_total_length, flags: 0x40, protocol: 0x06, source_address: .ipv4_address, destination_address)
+
+        // FIXME: put this into .push_tcp_header
+
+        Util::push_u16_to_u8_array(packet, source_port)
+        Util::push_u16_to_u8_array(packet, destination_port)
+        Util::push_u32_to_u8_array(packet, sequence_number)
+        Util::push_u32_to_u8_array(packet, acknowledgement_number)
+        Util::push_u16_to_u8_array(packet, flags)
+        Util::push_u16_to_u8_array(packet, window_size)
+        Util::push_u16_to_u8_array(packet, 0 as! u16) // Checksum placeholder
+        Util::push_u16_to_u8_array(packet, urgent_pointer)
+
+        // Options: NOP, NOP, Timestamp
+        packet.push(0x01u8)
+        packet.push(0x01u8)
+        Util::push_u16_to_u8_array(packet, 0x080a)
+        let timestamp: u32 = (session.timestamp_origin + (Time::jiffies() - session.timestamp_origin)) as! u32
+        Util::push_u32_to_u8_array(packet, timestamp)
+        Util::push_u32_to_u8_array(packet, session.timestamp_last_echo_reply)
+
+        // Calculate TCP checksum
+
+        mut checksum_packet: [u8] = []
+        // Source and destination IP
+        for i in 26..34 {
+            checksum_packet.push(packet[i])
+        }
+        // Protocol
+        checksum_packet.push(0x00u8)
+        checksum_packet.push(0x06u8)
+        // TCP Packet length
+        let tcp_packet_length: u16 = 40 as! u16
+        Util::push_u16_to_u8_array(checksum_packet, tcp_packet_length)
+
+        for i in 34..packet.size() {
+            checksum_packet.push(packet[i])
+        }
+
+        mut checksum = .calculate_header_checksum(checksum_packet, offset: 0, count: checksum_packet.size() as! i64)
+        checksum += 8
+        packet[50] = (checksum >> 8) as! u8
+        packet[51] = (checksum & 0xff) as! u8        
+
+        .tx_queue.push(packet)
+        return acknowledgement_number
+
+    }    
+    fn tcp_session_matches_current_session(mut this, anon session: TcpSession, anon local_address: [u8], anon remote_address: [u8], anon local_port: u16, anon remote_port: u16) -> bool {
+        if session.state as! i64 == TcpSessionState::Closed as! i64 {
+            return false
+        }
+        if (session.local_port != local_port) or (session.remote_port != remote_port) {
+            return false
+        }
+        for i in 0..4 {
+            if (session.local_address[i] != local_address[i]) {
+                return false
+            }
+            if (session.remote_address[i] != remote_address[i]) {
+                return false
+            }
+        }
+        return true
+    }
+    fn tcp_send(mut this, anon mut session: TcpSession, anon data: [u8]) throws {
+        session.pending_data_to_transmit.push_values(&data)
+    }
+    public fn tcp_process_client_send_requests(mut this, anon mac_address: [u8]) throws {
+        for i in 0..this.tcp_sessions.size() {
+            let socket = .tcp_sessions[i].socket
+            if socket > 0 {
+                mut data: [u8] = []
+                unsafe {
+                    cpp {
+                        "u64 *s = (u64*)socket;
+                        if (s[10] == 1) {
+                            u8 *buffer = (u8*)s[7];
+                            for (int i=0; i < s[9]; i++) {
+                                data.push(buffer[i]);
+                            }
+                            s[10] = 0;
+                        }"
+                    }
+                }
+                if data.size() > 0 {
+                    .tcp_send(.tcp_sessions[i], data)
+                }
+            }
+        }
+    }
+    public fn tcp_process_client_received_data(mut this) throws {
+        for i in 0..this.tcp_sessions.size() {
+            mut session = .tcp_sessions[i]
+            let socket = session.socket
+            mut length = session.received_data.size()
+            mut max_length: usize = 0
+            // s[4] = 0; // receive_buffer_size
+            if (socket > 0) {
+                unsafe {
+                    cpp {
+                        "u64 *s = (u64*)socket;
+                        max_length = s[4];"
+                    }
+                }
+            }
+            // FIXME: Should the client be responsible for malloc()ing the receive buffer?
+            if length > 65536 {
+                length = 65536
+            }
+            if (length > max_length) {
+                length = max_length
+            }
+            if (socket > 0) and (length == 0) and (.tcp_sessions[i].state as! i64 == TcpSessionState::Closed as! i64) {
+                .tcp_update_socket_session_state(.tcp_sessions[i].state, .tcp_sessions[i].socket)
+                mut client_is_not_ready_to_receive_data = 0
+                unsafe {
+                    cpp {
+                        "u64 *s = (u64*)socket;
+                        client_is_not_ready_to_receive_data = s[6];"
+                    }
+                }
+                if (client_is_not_ready_to_receive_data == 0) {
+                    // really close the connection
+                    unsafe {
+                        cpp {
+                            "u64 *s = (u64*)socket;
+                            s[5] = 0;
+                            s[6] = 1;
+                            if (s[3] > 0)
+                                free((u8*)s[3]);
+                            if (s[7] > 0)
+                                free((u8*)s[7]);
+                            "
+                        }
+                    }
+                    .tcp_sessions[i].socket = 0
+                }
+            }
+            if socket > 0 and length > 0 {
+                mut client_is_not_ready_to_receive_data = 0
+                unsafe {
+                    cpp {
+                        "u64 *s = (u64*)socket;
+                        client_is_not_ready_to_receive_data = s[6];"
+                    }
+                }
+                if (client_is_not_ready_to_receive_data == 0) {
+                    unsafe {
+                        cpp {
+                            "u64 *s = (u64*)socket;
+                            u8 *buffer = (u8*)s[3];
+                            for (int i=0; i < length; i++) {
+                                buffer[i] = session.received_data[i];
+                            }
+                            s[5] = length;
+                            s[6] = 1;"
+                        }
+                    }
+                    if (length == session.received_data.size() as! usize) {
+                        session.received_data.shrink(0)
+                    } else {
+                        mut remaining_received_data: [u8] = []
+                        for j in length..session.received_data.size() {
+                            remaining_received_data.push(session.received_data[j])
+                        }
+                        session.received_data.shrink(0)
+                        for j in 0..remaining_received_data.size() {
+                            session.received_data.push(remaining_received_data[j])
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn tcp_is_next_frame(mut this, index: i64, frame: [u8]) throws -> bool {
+        let tcp_packet = frame[34..]
+        mut sequence_number: u32 = 0
+        for o in 0..4 {
+            sequence_number += (tcp_packet[7 - o] as! u32) * match o {
+                1 => 256 as! u32
+                2 => (256 * 256) as! u32
+                3 => (256 * 256 * 256) as! u32
+                else => 1 as! u32
+            }
+        }
+        if (.tcp_sessions[index].acknowledgement_number == 0) {
+            // session not established yet, we're (hopefully) in a SYN/ACK
+            return true
+        }
+        if (sequence_number == .tcp_sessions[index].acknowledgement_number) {
+            return true
+        }
+        return false
+    }
+    fn tcp_handle_received_frame(mut this, anon i: i64, anon frame: [u8]) throws {
+        let ipv4_packet = frame[14..]
+        let tcp_packet = frame[34..]
+
+        let total_length = Util::get_u16_from_u8_arrayslice(ipv4_packet, 2) + 14
+
+        let source_address: [u8] = [ipv4_packet[12], ipv4_packet[13], ipv4_packet[14], ipv4_packet[15]]
+        let destination_address: [u8] = [ipv4_packet[16], ipv4_packet[17], ipv4_packet[18], ipv4_packet[19]]
+
+        mut source_port: u16 = Util::get_u16_from_u8_arrayslice(tcp_packet, 0)
+        mut destination_port: u16 = Util::get_u16_from_u8_arrayslice(tcp_packet, 2)
+
+        let header_length: u16 = ((tcp_packet[12] as! u16) >> 4) * 4
+        let flags: u16 = Util::get_u16_from_u8_arrayslice(tcp_packet, 12) & 0xfff
+
+        mut echo_reply: u32 = 0
+        mut tcp_options_offset = 54
+
+        while tcp_options_offset < frame.size() as! i64 {
+            match frame[tcp_options_offset] {
+                0u8 => { tcp_options_offset++ }
+                1u8 => { tcp_options_offset++ }
+                8u8 => {
+                    tcp_options_offset++
+                    echo_reply += (frame[tcp_options_offset + 1] as! u32 * (256 * 256 * 256) as! u32)
+                    echo_reply += (frame[tcp_options_offset + 2] as! u32 * (256 * 256) as! u32)
+                    echo_reply += (frame[tcp_options_offset + 3] as! u32 * 256 as! u32)
+                    echo_reply += frame[tcp_options_offset + 4] as! u32
+                    break
+                }
+                else => { tcp_options_offset += frame[tcp_options_offset + 1] as! i64 }
+            }
+        }
+
+        if (flags & 0xff) != 0x10 {
+            // Received a packet with flags other than just ACK
+            for i in 0..this.tcp_sessions.size() {
+                if (.tcp_session_matches_current_session(.tcp_sessions[i], destination_address, source_address, destination_port, source_port)) {
+                    mut received_data: [u8] = []
+                    for j in frame[(34u16 + header_length)..total_length] {
+                        received_data.push(j)
+                    }
+                    for j in 0..received_data.size() {
+                        .tcp_sessions[i].received_data.push(received_data[j])
+                    }
+                    if (.tcp_is_fin(flags)) {
+                        // Received request to close connection
+                        //println("Closing connection to IPv4 address: {}", source_address)
+                        if (.tcp_is_push(flags)) {
+                            .tcp_sessions[i].acknowledgement_number = .tcp_ack_packet(.tcp_sessions[i], frame, flags: 9u16)
+                        } else {
+                            .tcp_sessions[i].acknowledgement_number = .tcp_ack_packet(.tcp_sessions[i], frame, flags: 1u16)
+                        }
+                        .tcp_sessions[i].state = TcpSessionState::Closed
+                    } else if (.tcp_is_syn(flags)) and (.tcp_is_ack(flags)) {
+                        // Received SYN, ACK
+                        .tcp_sessions[i].timestamp_last_echo_reply = echo_reply
+                        .tcp_sessions[i].timestamp_last_jiffies = Time::jiffies()
+                        .tcp_sessions[i].local_sequence_number++
+                        .tcp_sessions[i].acknowledgement_number = .tcp_synack_ack_packet(.tcp_sessions[i], frame, flags: 0u16)
+                        .tcp_sessions[i].state = TcpSessionState::Established
+                        .tcp_update_socket_session_state(.tcp_sessions[i].state, .tcp_sessions[i].socket)
+                    } else {
+                        .tcp_sessions[i].timestamp_last_echo_reply = echo_reply
+                        .tcp_sessions[i].timestamp_last_jiffies = Time::jiffies()
+                        mut acknowledgement_number: u32 = 0
+                        for o in 0..4 {
+                            acknowledgement_number += (tcp_packet[11 - o] as! u32) * match o {
+                                1 => 256 as! u32
+                                2 => (256 * 256) as! u32
+                                3 => (256 * 256 * 256) as! u32
+                                else => 1 as! u32
+                            }
+                        }
+                        .tcp_sessions[i].local_sequence_number = acknowledgement_number
+                        if (.tcp_is_push(flags)) {
+                            .tcp_sessions[i].acknowledgement_number = .tcp_ack_packet(.tcp_sessions[i], frame, flags: 8u16)
+                        } else {
+                            .tcp_sessions[i].acknowledgement_number = .tcp_ack_packet(.tcp_sessions[i], frame, flags: 0u16)
+                        }
+                    }
+                }
+            }
+        } else if (flags & 0xff) == 0x10 {
+            // Received a packet with flags == just ACK
+            for i in 0..this.tcp_sessions.size() {
+                if (.tcp_session_matches_current_session(.tcp_sessions[i], destination_address, source_address, destination_port, source_port)) {
+                    mut received_data: [u8] = []
+                    for j in frame[(34u16 + header_length)..total_length] {
+                        received_data.push(j)
+                    }
+                    for j in 0..received_data.size() {
+                        .tcp_sessions[i].received_data.push(received_data[j])
+                    }
+                    mut sequence_number: u32 = 0
+                    for o in 0..4 {
+                        sequence_number += (tcp_packet[7 - o] as! u32) * match o {
+                            1 => 256 as! u32
+                            2 => (256 * 256) as! u32
+                            3 => (256 * 256 * 256) as! u32
+                            else => 1 as! u32
+                        }
+                    }
+                    mut acknowledgement_number: u32 = 0
+                    for o in 0..4 {
+                        acknowledgement_number += (tcp_packet[11 - o] as! u32) * match o {
+                            1 => 256 as! u32
+                            2 => (256 * 256) as! u32
+                            3 => (256 * 256 * 256) as! u32
+                            else => 1 as! u32
+                        }
+                    }
+                    let window_size: u16 = 0xffff
+                    if acknowledgement_number == .tcp_sessions[i].last_tx_sequence_number {
+                        .tcp_sessions[i].last_tx_was_acked = true
+                    }
+                    .tcp_sessions[i].local_sequence_number = acknowledgement_number
+                    if received_data.size() > 0 {
+                        .tcp_sessions[i].acknowledgement_number = .tcp_ack_packet(.tcp_sessions[i], frame, flags: 0u16)
+                    } else {
+                        .tcp_sessions[i].acknowledgement_number = sequence_number + (received_data.size() as! u32)
+                    }
+                    .tcp_sessions[i].last_window_size = window_size
+                    .tcp_sessions[i].timestamp_last_echo_reply = echo_reply
+                    .tcp_sessions[i].timestamp_last_jiffies = Time::jiffies()
+                }
+            }
+        }
+    }
+    fn tcp_handle_received_frames(mut this, anon index: i64) throws {
+        mut unhandled_frames: [[u8]] = []
+        for frame in .tcp_sessions[index].received_frames {
+            if .tcp_is_next_frame(index, frame) {
+                .tcp_handle_received_frame(index, frame)
+            } else {
+                unhandled_frames.push(frame)
+            }
+        }
+        .tcp_sessions[index].received_frames.shrink(0)
+        for frame in unhandled_frames {
+            .tcp_sessions[index].received_frames.push(frame)
+        }
+    }
+    fn process_udp_packet(mut this, anon mac_address: [u8], anon frame: [u8]) throws {
+        let ipv4_packet = frame[14..]
+        let udp_packet = frame[34..]
+
+        let source_address: [u8] = [ipv4_packet[12], ipv4_packet[13], ipv4_packet[14], ipv4_packet[15]]
+        let destination_address: [u8] = [ipv4_packet[16], ipv4_packet[17], ipv4_packet[18], ipv4_packet[19]]
+
+        mut source_port: u16 = Util::get_u16_from_u8_arrayslice(udp_packet, 0)
+        mut destination_port: u16 = Util::get_u16_from_u8_arrayslice(udp_packet, 2)
+
+        if (Util::get_hexadecimal_string_from_ipv4_u8_array(source_address) == Util::get_hexadecimal_string_from_ipv4_u8_array(.dns_server_address)) and (source_port == .dns_server_port) {
+            let transaction_id: u16 = Util::get_u16_from_u8_arrayslice(udp_packet, 8)
+            let flags: u16 = Util::get_u16_from_u8_arrayslice(udp_packet, 10)
+            // questions : 12-13
+            // answer_rrs: 14-15
+            // authority_rrs: 16-17
+            // additional_rrs: 18-19
+
+            if .pending_dns_lookups.contains(transaction_id) {
+                mut result: u32 = 0
+                mut result_type: u16 = 0
+                // skip over query data to get answer
+                mut response_pos = 20
+                while (udp_packet[response_pos] > 0) {
+                    response_pos += 1 + udp_packet[response_pos] as! i64
+                }
+                response_pos += 5 // skip over null byte, type, class
+                response_pos += 2 // skip over answer: name
+
+                result_type = 256 * udp_packet[response_pos] as! u16
+                result_type += udp_packet[response_pos + 1] as! u16
+
+                mut pointer_to_u32 = .pending_dns_lookups[transaction_id]
+                mut cached_result: [u8] = []
+
+                match result_type {
+                    1 => {
+                        // A record
+                        response_pos += 10
+                        result += (udp_packet[response_pos] as! u32 * (256 * 256 * 256) as! u32)
+                        result += (udp_packet[response_pos + 1] as! u32 * (256 * 256) as! u32)
+                        result += (udp_packet[response_pos + 2] as! u32 * 256 as! u32)
+                        result += udp_packet[response_pos + 3] as! u32
+                        cached_result.push(udp_packet[response_pos])
+                        cached_result.push(udp_packet[response_pos + 1])
+                        cached_result.push(udp_packet[response_pos + 2])
+                        cached_result.push(udp_packet[response_pos + 3])
+                        .dns_cache[.pending_dns_cached_entries[transaction_id]] = cached_result
+                    }
+                    5 => {
+                        // CNAME record
+                        response_pos += 8 // skip over answer: type, class, ttl
+                        let data_length = (256 * udp_packet[response_pos] as! i64) + udp_packet[response_pos + 1] as! i64
+                        response_pos += 2
+                        let data_pos = response_pos
+                        mut pointer_pos = 0
+
+                        mut s = StringBuilder::create()
+                        mut length = 0
+
+                        while (response_pos < data_pos + data_length) {
+                            match udp_packet[response_pos] {
+                                0xc0 => {
+                                    response_pos++
+                                    pointer_pos = 8 + udp_packet[response_pos++] as! i64
+                                    while (udp_packet[pointer_pos] > 0) {
+                                        length = udp_packet[pointer_pos] as! i64
+                                        pointer_pos++
+                                        for i in 0..length {
+                                            s.append(udp_packet[pointer_pos++])
+                                        }
+                                        if udp_packet[pointer_pos] > 0 {
+                                            s.append('.')
+                                        }
+                                    }
+                                }
+                                else => {
+                                    length = udp_packet[response_pos++] as! i64
+                                    for i in 0..length {
+                                        s.append(udp_packet[response_pos++])
+                                    }
+                                    if udp_packet[response_pos] > 0 {
+                                        s.append('.')
+                                    }
+                                }
+                            }
+                        }
+                        .send_dns_query(mac_address, s.to_string(), pointer_to_u32)
+                        pointer_to_u32 = 0
+                    }
+                    else => {
+                        // Unsupported record
+                        response_pos += 10 // skip over answer: type, class, ttl, data length
+                        result = 0xFFFFFFFF
+                    }
+                }
+                if pointer_to_u32 > 0 {
+                    unsafe {
+                        cpp {
+                            "u32 *r = (u32*)pointer_to_u32;
+                            r[0] = result;"
+                        }
+                    }
+                }
+                .pending_dns_lookups.remove(transaction_id)
+            }
+        }
+
+    }
+    fn is_listening_port(this, anon port: u16) -> bool {
+        return .bound_sockets.contains(port)
+    }
+    fn process_tcp_packet(mut this, anon mac_address: [u8], anon frame: [u8]) throws {
+        let ipv4_packet = frame[14..]
+        let tcp_packet = frame[34..]
+
+        let source_address: [u8] = [ipv4_packet[12], ipv4_packet[13], ipv4_packet[14], ipv4_packet[15]]
+        let destination_address: [u8] = [ipv4_packet[16], ipv4_packet[17], ipv4_packet[18], ipv4_packet[19]]
+
+        mut source_port: u16 = Util::get_u16_from_u8_arrayslice(tcp_packet, 0)
+        mut destination_port: u16 = Util::get_u16_from_u8_arrayslice(tcp_packet, 2)
+
+        let header_length: u16 = ((tcp_packet[12] as! u16) >> 4) * 4
+        let flags: u16 = Util::get_u16_from_u8_arrayslice(tcp_packet, 12) & 0xfff
+
+        mut echo_reply: u32 = 0
+        mut tcp_options_offset = 54
+
+        while tcp_options_offset < frame.size() as! i64 {
+            match frame[tcp_options_offset] {
+                0u8 => { tcp_options_offset++ }
+                1u8 => { tcp_options_offset++ }
+                8u8 => {
+                    tcp_options_offset++
+                    echo_reply += (frame[tcp_options_offset + 1] as! u32 * (256 * 256 * 256) as! u32)
+                    echo_reply += (frame[tcp_options_offset + 2] as! u32 * (256 * 256) as! u32)
+                    echo_reply += (frame[tcp_options_offset + 3] as! u32 * 256 as! u32)
+                    echo_reply += frame[tcp_options_offset + 4] as! u32
+                    break
+                }
+                else => { tcp_options_offset += frame[tcp_options_offset + 1] as! i64 }
+            }
+        }
+
+        if .tcp_is_syn(flags) and not (.tcp_is_ack(flags)) and (.is_listening_port(destination_port)) {
+            // Received SYN, begin a new connection
+            mut remote_mac: [u8] = []
+            for i in 6..12 {
+                remote_mac.push(frame[i])
+            }
+            if .is_local_ipv4_address(source_address) {
+                if not .arp_cache.contains(Util::get_hexadecimal_string_from_ipv4_u8_array(source_address)) {
+                    // send arp request
+                    //println("send arp request for: {}", Util::get_hexadecimal_string_from_ipv4_u8_array(source_address))
+                    .send_arp_request(mac_address, source_address)
+                }
+            }
+            mut socket: u64 = 0
+            let function: u64 = .bound_sockets[destination_port]
+            let source_address_u32 = Util::get_address_u32_from_ipv4_u8_array(source_address)
+            unsafe {
+                cpp {
+                    "
+                    u64* s = (u64*)calloc(256, 1);
+
+                    s[0] = source_address_u32;
+		            s[1] = source_port;
+                    s[2] = 1; // TCP_SOCKET_STATE_ESTABLISHED
+                    s[3] = (u64)calloc(65536, 1); // receive_buffer_ptr
+                    s[4] = 0; // receive_buffer_size
+                    s[5] = 0; // receive_buffer_filled
+                    s[6] = 0; // receive_buffer_kick
+                    s[7] = (u64)calloc(65536, 1); // send_buffer_ptr
+                    s[8] = 65536; // send_buffer_size
+                    s[9] = 0; // send_buffer_filled
+                    s[10] = 0; // send_buffer_kick
+
+                    socket = (u64)s;
+                    if (function && socket) {
+                        os_call(function, socket);
+                    }
+                    "
+                }
+            }
+            mut session = TcpSession(
+                local_mac: mac_address
+                remote_mac: remote_mac
+                local_address: destination_address
+                remote_address: source_address
+                local_port: destination_port
+                remote_port: source_port
+                local_sequence_number: (OS::random() & 0xffffffff) as! u32
+                acknowledgement_number: 0
+                timestamp_last_echo_reply: 0
+                timestamp_last_jiffies: 0
+                timestamp_origin: Time::jiffies()
+                last_window_size: 0
+                last_tx_sequence_number: 0
+                last_tx_was_acked: false
+                tx_chunk_counter: 0
+                state: TcpSessionState::Established
+                pending_data_to_transmit: []
+                received_data: []
+                received_frames: []
+                socket)
+            //println("Accepting connection from IPv4 address: {}", source_address)
+            session.timestamp_last_echo_reply = echo_reply
+            session.timestamp_last_jiffies = Time::jiffies()
+            session.acknowledgement_number = .tcp_ack_packet(session, frame, flags)
+            .tcp_sessions.push(session)
+        } else {
+            // Add packet to list to be processed
+            for i in 0..this.tcp_sessions.size() {
+                if (.tcp_session_matches_current_session(.tcp_sessions[i], destination_address, source_address, destination_port, source_port)) {
+                    .tcp_sessions[i].received_frames.push(frame)
+                    .tcp_handle_received_frames(i as! i64)
+                }
+            }
+        }
+    }
+    public fn process_ipv4_packet(mut this, anon mac_address: [u8], anon frame: [u8]) throws {
+        let ipv4_packet = frame[14..]
+
+        let version = ipv4_packet[0] >> 4
+        let header_length = (ipv4_packet[0] as! i64 & 0xf) * 4
+        let dsf = ipv4_packet[1]
+        let total_length = Util::get_u16_from_u8_arrayslice(ipv4_packet, 2)
+        let identification = Util::get_u16_from_u8_arrayslice(ipv4_packet, 4)
+        let flags = ipv4_packet[6]
+        let ttl = ipv4_packet[8]
+        let protocol = ipv4_packet[9]
+        let checksum = Util::get_u16_from_u8_arrayslice(ipv4_packet, 10)
+        let source_address: [u8] = [ipv4_packet[12], ipv4_packet[13], ipv4_packet[14], ipv4_packet[15]]
+        let destination_address: [u8] = [ipv4_packet[16], ipv4_packet[17], ipv4_packet[18], ipv4_packet[19]]
+
+        match protocol {
+            1 => {
+                .process_icmp_packet(mac_address, frame)
+            }
+            6 => {
+                .process_tcp_packet(mac_address, frame)
+            }
+            17 => {
+                .process_udp_packet(mac_address, frame)
+            }
+            else => {
+                // unsupported
+            }
+        }
+    }
+    public fn set_ipv4_address(mut this, anon ipv4_address: [i64]) {
+        for i in 0..4 {
+            .ipv4_address[i] = ipv4_address[i] as! u8
+        }
+    }
+    public fn set_ipv4_netmask(mut this, anon ipv4_netmask: [i64]) {
+        for i in 0..4 {
+            .ipv4_netmask[i] = ipv4_netmask[i] as! u8
+        }
+    }
+    public fn set_ipv4_network(mut this, anon ipv4_network: [i64]) {
+        for i in 0..4 {
+            .ipv4_network[i] = ipv4_network[i] as! u8
+        }
+    }
+    public fn set_ipv4_gateway(mut this, anon ipv4_gateway: [i64]) {
+        for i in 0..4 {
+            .ipv4_gateway[i] = ipv4_gateway[i] as! u8
+        }
+    }
+    fn is_local_ipv4_address(this, anon check_ipv4_address: [u8]) -> bool {
+        let check_ipv4_address_u32 = Util::get_address_u32_from_ipv4_u8_array(check_ipv4_address)
+        let local_network_address_u32 = Util::get_address_u32_from_ipv4_u8_array(.ipv4_network)
+        let local_netmask_address_u32 = Util::get_address_u32_from_ipv4_u8_array(.ipv4_netmask)
+        // NOTE: The line below was added and the subsequent line was modified after jakt PR #1596 to suppress a warning from codegen output
+        // tcpip.cpp:2599:90: warning: & has lower precedence than ==; == will be evaluated first [-Wparentheses]
+        // 2599 | return (local_network_address_u32 & local_netmask_address_u32) == check_ipv4_address_u32 & local_netmask_address_u32;
+            // |        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        // tcpip.cpp:2599:90: note: place parentheses around the '==' expression to silence this warning
+        let check_ipv4_address_u32_and_with_netmask = check_ipv4_address_u32 & local_netmask_address_u32
+        return (local_network_address_u32 & local_netmask_address_u32) == check_ipv4_address_u32_and_with_netmask
+    }
+    fn tcp_update_socket_session_state(mut this, anon state: TcpSessionState, anon socket: u64) throws {
+        unsafe {
+            cpp {
+                "u64 *s = (u64*)socket;
+                s[2] = (u64)state;
+                "
+            }
+        }
+    }
+    public fn tcp_process_bind_request(mut this) {
+        mut did_receive_request = false
+        mut port: u16 = 0
+        mut function: u64 = 0
+        mut response_code: u64 = 0
+        unsafe {
+            cpp {
+                "
+                u64 *request = (u64*)0x300040;
+                if (*request) {
+                    did_receive_request = true;
+                    u64 *b = (u64*)*request;
+                    port = b[0];
+                    function = b[1];
+                }
+                "
+            }
+        }
+        if did_receive_request {
+            if .bound_sockets.contains(port) {
+                response_code = TcpBindError::SocketIsAlreadyBound as! u64
+            } else if port < 1 or function < 1 {
+                response_code = TcpBindError::BadRequest as! u64
+            } else {
+                .bound_sockets[port] = function
+            }
+            unsafe {
+                cpp {
+                    "
+                    u64 *request = (u64*)0x300040;
+                    u64 *b = (u64*)*request;
+                    b[2] = response_code;
+                    *request = 0;
+                    "
+                }
+            }
+        }
+    }
+    public fn tcp_process_client_socket_request(mut this, anon mac_address: [u8]) throws {
+        mut did_receive_request = false
+        mut remote_address: u32 = 0
+        mut remote_port: u16 = 0
+        mut session_remote_mac: [u8] = []
+        mut socket: u64 = 0
+        unsafe {
+            cpp {
+                "u64 *ls_request = (u64*)0x300000;
+                if (*ls_request) {
+                    u64 *ls_s = (u64*)*ls_request;
+                    remote_address = ls_s[0];
+                }"
+            }
+        }
+        if (remote_address > 0) {
+            mut remote_address_hex_string = Util::get_hexadecimal_string_from_ipv4_u8_array(.ipv4_gateway)
+            if .is_local_ipv4_address(Util::get_ipv4_u8_array_from_address_u32(remote_address)) {
+                remote_address_hex_string = Util::get_hexadecimal_string_from_ipv4_u8_array(Util::get_ipv4_u8_array_from_address_u32(remote_address))
+                if not .arp_cache.contains(remote_address_hex_string) {
+                    // send arp request
+                    //println("send arp request for: {}", remote_address_hex_string)
+                    .send_arp_request(mac_address, Util::get_ipv4_u8_array_from_address_u32(remote_address))
+                    return
+                }
+            }
+            session_remote_mac = .arp_cache[remote_address_hex_string]
+        } else {
+            return
+        }
+        unsafe {
+            cpp {
+                "u64 *request = (u64*)0x300000;
+                if (*request) {
+                    did_receive_request = true;
+                    u64 *s = (u64*)*request;
+
+                    s[2] = 5; // TCP_SOCKET_STATE_IDLE
+
+                    s[3] = (u64)calloc(65536, 1); // receive_buffer_ptr
+                    s[4] = 0; // receive_buffer_size
+                    s[5] = 0; // receive_buffer_filled
+                    s[6] = 1; // receive_buffer_kick
+
+                    s[7] = (u64)calloc(65536, 1); // send_buffer_ptr
+                    s[8] = 65536; // send_buffer_size
+                    s[9] = 0; // send_buffer_filled
+                    s[10] = 0; // send_buffer_kick
+
+                    remote_address = s[0];
+                    remote_port = s[1];
+                    socket = (u64)s;
+                    *request = 0;
+                }" 
+            }
+        }
+        if (did_receive_request) {
+            let local_sequence_number: u32 = (OS::random() & 0xffffffff) as! u32
+
+            mut session = TcpSession(
+                local_mac: mac_address
+                remote_mac: session_remote_mac
+                local_address: .ipv4_address
+                remote_address: Util::get_ipv4_u8_array_from_address_u32(remote_address)
+                local_port: (OS::random() & 0xffff) as! u16 // FIXME
+                remote_port
+                local_sequence_number
+                acknowledgement_number: 0
+                timestamp_last_echo_reply: 0
+                timestamp_last_jiffies: Time::jiffies()
+                timestamp_origin: Time::jiffies()
+                last_window_size: 0xffff
+                last_tx_sequence_number: 0
+                last_tx_was_acked: false
+                tx_chunk_counter: 0
+                state: TcpSessionState::Connecting
+                pending_data_to_transmit: []
+                received_data: []
+                received_frames: []
+                socket)
+            .tcp_syn_packet(session)
+            .tcp_update_socket_session_state(session.state, session.socket)
+            .tcp_sessions.push(session)
+            did_receive_request = false
+        }
+    }
+}

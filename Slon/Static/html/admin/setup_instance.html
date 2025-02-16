@@ -1,0 +1,83 @@
+<!doctypehtml>
+    <link href=https://cdn.jsdelivr.net/npm/bulma@1.0.3/css/bulma.min.css rel=stylesheet>
+    <style>
+        body {
+            padding: 32px
+        }
+
+        .container {
+            width: 640px
+        }
+
+        .next {
+            text-align: right
+        }
+
+        .spacer {
+            height: 16px
+        }
+    </style>
+    <div class=container>
+        <nav class=panel>
+            <form action="javascript:setupInstance()">
+                <p class=panel-heading>Setup
+                <div class=section>
+                    <p>Enter the following information to set up your Slon instance.
+                    <div class=spacer></div>
+                    <label class=label>URI</label>
+                    <div class=control><input id=uri class=input placeholder=my-slon-instance.foo required
+                            autocomplete=off></div>
+                    <div style=height:16px></div>
+
+                    <label class=label>Title</label>
+                    <div class=control><input id=title class=input placeholder="My Slon Instance" required
+                            autocomplete=off></div>
+                    <div class=spacer></div>
+
+                    <label class=label>Description</label>
+                    <div class=control><input id=description class=input
+                            placeholder="A fediverse instance running on TempleOS" required autocomplete=off></div>
+                    <div class=spacer></div>
+
+                    <label class=label>Administrator Email</label>
+                    <div class=control><input id=email class=input placeholder=alec@checksum.fail required type=email
+                            autocomplete=off>
+                    </div>
+                    <div class=spacer></div>
+
+                    <label class=checkbox><input id=registrations type=checkbox> Enable
+                        registrations</label>
+                    <div class="control next"><input class="button is-link" type=submit value=Next></div>
+                </div>
+            </form>
+        </nav>
+    </div>
+    <script>
+        addEventListener("DOMContentLoaded", (event) => {
+            document.getElementById("uri").focus();
+        })
+        async function setupInstance() {
+            let data = {};
+            let fields = document.getElementsByTagName("input");
+            for (var i = 0; i < fields.length; i++) {
+                switch (fields[i].type) {
+                    case "checkbox":
+                        data[fields[i].id] = fields[i].checked;
+                        break;
+                    case "submit":
+                        break;
+                    default:
+                        data[fields[i].id] = fields[i].value;
+                        break;
+                }
+            }
+            const request = new Request("/setup/instance", {
+                headers: { "Content-Type": "application/json" },
+                method: "POST",
+                body: JSON.stringify(data)
+            });
+            const response = await fetch(request);
+            const json = await response.json();
+            window.location = "/";
+        }
+    </script>

@@ -1,0 +1,147 @@
+import relative parent::os::os { OS }
+
+struct Util {
+    fn get_address_u32_from_ipv4_u8_array(anon array: [u8]) -> u32 {
+        if array.size() != 4 {
+            return 0
+        }
+        mut address: u32 = (array[3] as! u32 & 0xff) as! u32
+        address += ((array[2] as! u32 & 0xff) << 8) as! u32
+        address += ((array[1] as! u32 & 0xff) << 16) as! u32
+        address += ((array[0] as! u32 & 0xff) << 24) as! u32
+        return address
+    }
+    fn get_hexadecimal_string_from_ipv4_u8_array(anon array: [u8]) throws -> String {
+        mut s = StringBuilder::create()
+        unsafe {
+            cpp {
+                "char *chars = (char*)calloc(32, 1);
+                sprintf(chars, \"%02x%02x%02x%02x\", array[0], array[1], array[2], array[3]);
+                s.append_c_string(chars);
+                delete(chars);"
+            }
+        }
+        return s.to_string()
+    }
+    fn get_md5_string_from_string(anon s: String) throws -> String {
+        mut sb = StringBuilder::create()
+        unsafe {
+            cpp {
+                "
+                char* md5 = (char*)os_call((u64)\"@saubari_get_md5_string_from_string\", (u64)s.characters());
+                sb.append_c_string(md5);
+                delete(md5);
+                "
+            }
+        }
+        return sb.to_string()
+    }
+    fn get_ipv4_u8_array_from_address_string(anon s: String) throws -> [u8] {
+        mut address: [u8] = []
+        let octet_strings = s.split(c'.')
+        for octet_string in octet_strings {
+            unsafe {
+                cpp {
+                    "auto value = octet_string.to_number<u32>();
+                    if (value.has_value()) {
+                        auto result = value.release_value();
+                        address.push(result & 0xff);
+                    }"
+                }
+            }
+        }
+        return address
+    }
+    fn get_ipv4_u8_array_from_address_u32(anon addr: u32) throws -> [u8] {
+        mut address: [u8] = []
+        // let source_address: [u8] = [ipv4_packet[12], ipv4_packet[13], ipv4_packet[14], ipv4_packet[15]]
+        address.push(((addr >> 24) & 0xff) as! u8)
+        address.push(((addr >> 16) & 0xff) as! u8)
+        address.push(((addr >> 8) & 0xff) as! u8)
+        address.push((addr & 0xff) as! u8)
+        return address
+    }
+    fn get_string_from_u8_array(anon array: [u8]) throws -> String {
+        mut s = StringBuilder::create()
+        unsafe {
+            cpp {
+                "for (int i = 0; i < array.size(); i++) {
+                    s.append(array[i]);
+                }"
+            }
+        }
+        return s.to_string()
+    }
+    fn get_u16_from_u8_array(anon array: [u8], anon offset: i64) -> u16{
+        return (array[offset] as! u16 << 8) + array[offset + 1] as! u16
+    }
+    fn get_u16_from_u8_arrayslice(anon array: ArraySlice<u8>, anon offset: i64) -> u16{
+        return (array[offset] as! u16 << 8) + array[offset + 1] as! u16
+    }
+    fn push_string_to_u8_array(anon mut array: [u8], anon s: String) throws {
+        for i in 0..s.length() {
+            unsafe {
+                cpp {
+                    "array.push(s.characters()[i]);"
+                }
+            }
+        }
+    }
+    fn push_u16_to_u8_array(anon mut array: [u8], anon value: u16) throws {
+        array.push((value >> 8) as! u8)
+        array.push((value & 0xff) as! u8)
+    }
+    fn push_u32_to_u8_array(anon mut array: [u8], anon value: u32) throws {
+        mut val_u32_to_u8: u32 = 0
+        val_u32_to_u8 = (value >> 24) & 0xff
+        array.push(val_u32_to_u8 as! u8)
+        val_u32_to_u8 = (value >> 16) & 0xff
+        array.push(val_u32_to_u8 as! u8)
+        val_u32_to_u8 = (value >> 8) & 0xff
+        array.push(val_u32_to_u8 as! u8)
+        array.push((value & 0xff) as! u8)
+    }
+    fn get_dictionary_from_json_file(anon json_file: String) throws -> [String:String] {
+        mut dictionary: [String:String] = Dictionary()
+        let json_bytes = OS::read_entire_file(json_file)
+        let json_string = get_string_from_u8_array(json_bytes)
+        unsafe {
+            cpp {
+                "auto json = JsonValue::from_string(json_string).value();
+                auto const& object = json.as_object();
+                object.for_each_member([&]([[maybe_unused]] auto& property_name, [[maybe_unused]] const JsonValue& property_value) {
+                    dictionary.set(property_name, property_value.deprecated_to_byte_string());
+                });"
+            }
+        }
+        return dictionary
+    }
+    fn get_dictionary_from_string(anon s: String) throws -> [String:String] {
+        mut dictionary: [String:String] = Dictionary()
+        unsafe {
+            cpp {
+                "auto json = JsonValue::from_string(s).value();
+                auto const& object = json.as_object();
+                object.for_each_member([&]([[maybe_unused]] auto& property_name, [[maybe_unused]] const JsonValue& property_value) {
+                    dictionary.set(property_name, property_value.deprecated_to_byte_string());
+                });"
+            }
+        }
+        return dictionary
+    }
+    fn string_from_file(anon filepath: String) throws -> String {
+        if filepath.is_empty() or not OS::path_exists(filepath) {
+            return ""
+        }
+        let array = OS::read_entire_file(filepath)
+        mut s = StringBuilder::create()
+        unsafe {
+            cpp {
+                "for (int i = 0; i < array.size(); i++) {
+                    s.append(array[i]);
+                }"
+            }
+        }
+        return s.to_string()
+    }
+}

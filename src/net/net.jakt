@@ -1,0 +1,173 @@
+import devices::virtio { VirtIO, VirtIOReg }
+
+import lib::util { Util }
+
+import os::os { OS }
+import os::pci { PCI, PCIDevice }
+import os::time { Time }
+
+import tcpip { TCPIP }
+
+class NetDevices {
+    public virtio: VirtIO
+    public fn create(pci_device: PCIDevice) throws -> NetDevices {
+        return NetDevices(
+            virtio: VirtIO(pci_device, rq_index: 0, rq_size: 0, rq: 0, tq_size: 0, tq: 0)
+        )
+    }
+}
+
+class Net {
+    public device: NetDevices
+    public mac_address: [u8]
+    public tcpip: TCPIP
+    public pci_device: PCIDevice
+    public fn init(config: [String:String]) throws -> Net {
+        let pci_device = PCI::find_device_by_class_code(0x020000)
+        mut net = Net(
+            device: NetDevices::create(pci_device)
+            mac_address: []
+            tcpip: TCPIP(
+                ipv4_address: Util::get_ipv4_u8_array_from_address_string(config["tcpip.ipv4_address"])
+                ipv4_netmask: Util::get_ipv4_u8_array_from_address_string(config["tcpip.ipv4_netmask"])
+                ipv4_network: Util::get_ipv4_u8_array_from_address_string(config["tcpip.ipv4_network"])
+                ipv4_gateway: Util::get_ipv4_u8_array_from_address_string(config["tcpip.ipv4_gateway"])
+                dns_server_address: Util::get_ipv4_u8_array_from_address_string(config["tcpip.ipv4_dns_server_address"])
+                dns_server_port: config["tcpip.ipv4_dns_server_port"].to_number<u32>().value() as! u16
+                mss_size: config["tcpip.mss_size"].to_number<u32>().value() as! u16
+                tx_queue: []
+                ttl: 64
+                arp_cache: Dictionary()
+                bound_sockets: Dictionary()
+                dns_cache: Dictionary()
+                tcp_sessions: []
+                pending_dns_lookups: Dictionary()
+                pending_dns_cached_entries: Dictionary()
+                pending_icmp_requests: Dictionary()
+                timestamp_last_arp_request: 0
+                rx_bytes: 0
+                rx_frames: 0
+                tx_bytes: 0
+                tx_frames: 0
+                )
+            pci_device
+        )
+        if net.pci_device.vendor_id() == 0x1af4 and net.pci_device.device_id() == 0x1000 {
+            println("[net] Found device: virtio-net, QEMU")
+            for i in 0u16..6u16 {
+                net.mac_address.push(net.pci_device.io_read_u8(VirtIOReg::config as! u16 + i))
+            }
+            net.device.virtio.init()
+            return net
+        }
+        println("[net] No supported vendor ids found")
+        OS::exit()
+        return net
+    }
+    fn process_ethernet_frame(mut this, anon frame: [u8]) throws {
+        let ethertype: u16 = (frame[12] as! u16 * 256) + frame[13] as! u16
+        match ethertype {
+            0x0806 => {
+                //println("ARP")
+                .tcpip.process_arp_packet(.mac_address, frame)
+            }
+            0x0800 => {
+                //println("IPv4")
+                .tcpip.process_ipv4_packet(.mac_address, frame)
+            }
+            0x86dd => {
+                //.tcpip.process_ipv6_packet(frame)
+            }
+            0x8035 => {
+                //.tcpip.process_rarp_packet(frame)
+            }
+            else => {
+                // unsupported
+            }
+        }
+    }
+    public fn process_events(mut this) throws {
+        mut received_frame = .rx_frame()
+        if received_frame.size() > 0 {
+            .tcpip.rx_bytes += received_frame.size() as! u64
+            .tcpip.rx_frames++
+            .process_ethernet_frame(received_frame)
+        }
+        .tcpip.tcp_transmit_pending_data_for_existing_sessions()
+        for frame in .tcpip.tx_queue {
+            .tx_frame(frame)
+        }
+        if .tcpip.tx_queue.size() > 0 {
+            .tcpip.tx_queue.shrink(0)
+        }
+        .tcpip.tcp_process_bind_request()
+        .tcpip.tcp_process_client_socket_request(.mac_address)
+        .tcpip.tcp_process_client_received_data()
+        .tcpip.tcp_process_client_send_requests(.mac_address)
+        .tcpip.dns_process_client_request(.mac_address)
+        .tcpip.icmp_process_client_request(.mac_address)
+        .tcpip.netinfo_process_client_request(.mac_address)
+    }
+    fn rx_frame(mut this) throws -> [u8] {
+        mut frame: [u8] = []
+        if .pci_device.vendor_id() == 0x1af4 and .pci_device.device_id() == 0x1000 {
+            frame = .device.virtio.rx_frame()
+        }
+        return frame
+    }
+    fn tx_frame(mut this, anon mut data: [u8]) throws {
+        if data.size() < 1 {
+            return
+        }
+        while data.size() < 60 {
+            data.push(0u8)
+        }
+        .tcpip.tx_bytes += data.size() as! u64
+        .tcpip.tx_frames++
+        if .pci_device.vendor_id() == 0x1af4 and .pci_device.device_id() == 0x1000 {
+            .device.virtio.tx_frame(data)
+        }
+    }
+}
+
+fn main() {
+    println("$WW,1$")
+    mut config = Util::get_dictionary_from_json_file("M:/System/Config/Net.json")
+    mut net = Net::init(config)
+
+    println("[net] PCI device is {}", net.pci_device)
+    print("[net] MAC address is ")
+    for i in 0u16..5u16 {
+        print("{:0>2x}:", net.mac_address[i])
+    }
+    println("{:0>2x}", net.mac_address[5])
+    print("[net] IPv4 address is ")
+    for i in 0u16..3u16 {
+        print("{:d}.", net.tcpip.ipv4_address[i])
+    }
+    println("{:d}", net.tcpip.ipv4_address[3])
+    println(" ")
+
+    // Update the ARP cache entry for IPv4 gateway address
+    net.tcpip.send_arp_request(net.mac_address, net.tcpip.ipv4_gateway)
+
+    mut prev_rx_frames = net.tcpip.rx_frames
+    mut prev_tx_frames = net.tcpip.tx_frames
+    mut prev_jiffies = Time::jiffies()
+
+    while true {
+        net.process_events()
+        if (prev_rx_frames != net.tcpip.rx_frames) or (prev_tx_frames != net.tcpip.tx_frames) {
+            prev_rx_frames = net.tcpip.rx_frames
+            prev_tx_frames = net.tcpip.tx_frames
+            prev_jiffies = Time::jiffies()
+        }
+        if Time::jiffies() < prev_jiffies + 250 {
+            Time::sleep(0)
+        } else {
+            Time::sleep(1)
+        }
+    }
+
+    OS::exit()
+}

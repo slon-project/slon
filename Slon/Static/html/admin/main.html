@@ -1,0 +1,168 @@
+<!doctypehtml>
+    <link href=https://cdn.jsdelivr.net/npm/bulma@1.0.3/css/bulma.min.css rel=stylesheet>
+    <style>
+        body {
+            padding: 32px
+        }
+
+        .container-x {
+            width: 640px
+        }
+
+        .next {
+            text-align: right
+        }
+
+        .spacer {
+            height: 16px
+        }
+
+        .main-content {
+            padding-left: 32px;
+            width: 100%;
+            vertical-align: top
+        }
+
+        .menu {
+            width: 240px
+        }
+    </style>
+    <aside class="menu is-inline-block">
+        <p class="menu-label">Info</p>
+        <ul class="menu-list">
+            <li><a onclick="infoStats()" id="menuitem-stats">Statistics</a></li>
+        </ul>
+        <p class="menu-label">Manage</p>
+        <ul class="menu-list">
+            <li><a onclick="manageAccounts()" id="menuitem-accounts">Accounts</a></li>
+            <li><a onclick="manageInstance()" id="menuitem-instance">Instance</a></li>
+        </ul>
+        <p class="menu-label">Diagnostics</p>
+        <ul class="menu-list">
+            <li><a onclick="diagsLogs()" id="menuitem-logs">Logs</a></li>
+        </ul>
+    </aside>
+    <div id="content" class="container main-content is-inline-block">
+    </div>
+    <script>
+        function clearActiveLinks() {
+            document.querySelectorAll("a").forEach(function (a) { a.className = ""; });
+        }
+        function setActiveLink(link) {
+            document.getElementById("menuitem-" + link).className = "is-active";
+        }
+        function setContent(html) {
+            document.getElementById("content").innerHTML = html;
+        }
+        async function infoStats() {
+            clearActiveLinks();
+            const request = new Request("/info/stats");
+            const response = await fetch(request);
+            const stats = await response.json();
+            let html = "<h4 class=\"title is-4\">Statistics</h4><div class=spacer></div><div>Uptime: " + formatTime(stats["uptime"]) + "</div>";
+            setContent(html);
+            setActiveLink("stats");
+        }
+        async function manageAccounts() {
+            clearActiveLinks();
+            const request = new Request("/manage/accounts");
+            const response = await fetch(request);
+            const accounts = await response.json();
+            let html = "<h4 class=\"title is-4\">Accounts</h4><div class=spacer></div>";
+            if (accounts.length) {
+                html += "<table class=table><thead><tr><th>id</th><th>username</th></tr></head><tbody>";
+                for (let i = 0; i < accounts.length; i++) {
+                    html += "<tr><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["username"] + "</td><tr>";
+                }
+                html += "</tbody></table>";
+            } else {
+                html += "No users";
+            }
+            html += "<br><br><input onclick=manageNewUser() class=button type=button value=\"New User\">";
+            setContent(html);
+            setActiveLink("accounts");
+        }
+        function manageNewUser() {
+            clearActiveLinks();
+            let html = "<h4 class=\"title is-4\">New User</h4><div class=spacer></div>";
+
+            html += "<form action=\"javascript:saveNewUser()\"><div>";
+
+            html += "<div class=\"section is-inline-block\" style=\"width:420px;vertical-align:top\">";
+            html += "<label class=label>Username</label><div class=control><input id=username class=input placeholder=baoh required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Display Name</label><div class=control><input id=display_name class=input placeholder=\"Ikuro Hashizawa\" required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Email</label><div class=control><input id=email class=input type=email placeholder=\"cooldude42069@checksum.fail\" required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Bio</label><div class=control><input id=bio class=input placeholder=\"ima firin mah lazer cannon\" required autocomplete=off></div><div class=spacer></div>";
+            html += "</div>";
+            html += "<div class=\"section is-inline-block\" style=\"width:420px;vertical-align:top\">";
+            html += "<label class=label>Avatar</label><div class=control><input id=avatar class=input placeholder=\"https://full.path.to/my/avatar.png\" required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Header</label><div class=control><input id=header class=input placeholder=\"https://full.path.to/my/header.png\" required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Private Key (must be in DER format)</label><div class=control><input onchange=updateBase64(this) id=privatekey type=file required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Public Key (must be in PEM format)</label><div class=control><input onchange=updateBase64(this) id=publickey type=file required autocomplete=off></div><div class=spacer></div>";
+            html += "</div>";
+
+            html += "</div>";
+            html += "<div class=\"control next\"><input class=\"button is-link\" type=submit value=Save></div>"
+            html += "</div></form>";
+
+            setContent(html);
+            setActiveLink("accounts");
+        }
+        async function saveNewUser() {
+            let data = {};
+            let fields = document.getElementsByTagName("input");
+            for (var i = 0; i < fields.length; i++) {
+                switch (fields[i].type) {
+                    case "checkbox":
+                        data[fields[i].id] = fields[i].checked;
+                        break;
+                    case "file":
+                        data[fields[i].id] = fields[i].base64;
+                        break;
+                    case "submit":
+                        break;
+                    default:
+                        data[fields[i].id] = fields[i].value;
+                        break;
+                }
+            }
+            const request = new Request("/new/account", {
+                headers: { "Content-Type": "application/json" },
+                method: "POST",
+                body: JSON.stringify(data)
+            });
+            const response = await fetch(request);
+            const json = await response.json();
+            if (!Object.keys(json).length) {
+                manageAccounts();
+            } else {
+                alert(JSON.stringify(json));
+            }
+        }
+        function updateBase64(el) {
+            let reader = new FileReader();
+            reader.readAsDataURL(el.files[0]);
+            reader.addEventListener(
+                "load",
+                () => {
+                    el.base64 = reader.result.split(";base64,")[1];
+                }
+            );
+        }
+        const formatTime = milliseconds => {
+            const seconds = Math.floor((milliseconds / 1000) % 60);
+            const minutes = Math.floor((milliseconds / 1000 / 60) % 60);
+            const hours = Math.floor((milliseconds / 1000 / 60 / 60) % 24);
+            return [
+                hours.toString().padStart(2, "0"),
+                minutes.toString().padStart(2, "0"),
+                seconds.toString().padStart(2, "0")
+            ].join(":");
+        }
+        addEventListener("DOMContentLoaded", (event) => {
+            infoStats();
+        })
+        document.querySelectorAll("input[type=file]").forEach(function (e) {
+            a.className = "";
+        });
+    </script>

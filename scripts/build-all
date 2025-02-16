@@ -1,0 +1,188 @@
+#!/usr/bin/python3
+from pathlib import Path
+import glob
+import os
+import subprocess
+import sys
+import time
+
+if len(sys.argv) < 2:
+    raise ValueError('wrong number of arguments')
+
+project_path = sys.argv[1] + '/'
+project_name = project_path.rsplit('/')[-2]
+
+isoc_file = project_path + 'build/isoc/Slon.ISO.C'
+redsea_path = project_path + 'build/redsea'
+
+home_path = str(Path.home()) + '/'
+
+jakt_compiler_path = home_path + 'cloned/jakt/build/bin/jakt'
+jakt_runtime_path = home_path + 'cloned/jakt/runtime'
+jakt_lib_path = home_path + 'cloned/jakt/build/lib/x86_64-unknown-linux-unknown/'
+
+qemu_slipstream_iso_file = project_path + 'build/isoc/bootable.iso'
+qemu_virtio_disk_path = home_path + 'virtio-disk.qcow2'
+
+qemu_bin_path = home_path + "/Programs/qemu-9.1.2/build/qemu-system-x86_64"
+qemu_display = "-display sdl,grab-mod=rctrl"
+
+templeos_iso_file = home_path + 'iso/TempleOS.ISO'
+
+qemu_run_cmd = qemu_bin_path + ' ' + qemu_display + ' -enable-kvm -m 1024 -netdev tap,id=mynet0,ifname=tap0,script=no,downscript=no -device virtio-net,netdev=mynet0 -drive file=' + qemu_virtio_disk_path + ',format=qcow2,if=none,index=0,media=disk,id=virtio-disk -device virtio-blk-pci,drive=virtio-disk -cdrom ' + qemu_slipstream_iso_file + ' -debugcon stdio -boot d'
+
+def clang_format_src_files():
+    print("build-all: clang-format-src-files")
+    exclude_paths = ["stb_", "tlse", ".iso.c"]
+    format_file_extensions = [".c", ".cpp", ".h", ".hc"]
+    for src_file in glob.glob(project_path + "**", recursive=True):
+        exclude_file = False
+        for exclude_path in exclude_paths:
+            if src_file.lower().find(exclude_path) > 0:
+                exclude_file = True
+        if exclude_file:
+            continue
+        for format_file_extension in format_file_extensions:
+            if src_file.lower().endswith(format_file_extension):
+                print(src_file)
+                res = os.system('clang-format -i --style=file:' + project_path + '.clang-format ' + src_file)
+                if res:
+                    raise ValueError("build-all: step 'clang-format-src-files' failed, error code " + str(res))
+
+def refresh_build_path():
+    print("build-all: refresh-build-path")
+    res = os.system('rm -rf ' + project_path + 'build && mkdir -p ' + project_path + 'build/bin && mkdir -p ' + project_path + 'build/isoc && mkdir -p ' + project_path + 'build/lib && mkdir -p ' + project_path + 'build/redsea')
+    if res:
+        raise ValueError("build-all: step 'refresh-build-path' failed, error code " + str(res))
+
+def build_image():
+    print("build-all: build-image")
+    build_specific_options = '-Wl,--section-start=.text=0x1004000 -Wl,--section-start=.plt=0x1002020 -no-pie'
+    res = os.system('cd ' + project_path + '&& cd src/image && gcc -o ../../build/bin/image ' + build_specific_options + ' -O0 -mno-mmx -mno-red-zone image.c')
+    if res:
+        raise ValueError("build-all: step 'build-image' failed, error code " + str(res))
+
+def build_libtemple():
+    print("build-all: build-libtemple")
+    res = os.system('cd ' + project_path + 'src/libtemple && g++ -c -o ../../build/libtemple.o libtemple.cpp && gcc -shared -o ../../build/lib/libtemple.so ../../build/libtemple.o && rm ' + project_path + 'build/libtemple.o')
+    if res:
+        raise ValueError("build-all: step 'build-libtemple' failed, error code " + str(res))
+
+def build_tlse():
+    print("build-all: build-tlse")
+    build_specific_options = '-Wl,--section-start=.text=0x1204000 -Wl,--section-start=.plt=0x1202020 -no-pie'
+    res = os.system('cd ' + project_path + '&& cd src/tlse && gcc -o ../../build/bin/tlse ' + build_specific_options + ' -O0 -mno-mmx -mno-red-zone -DTLS_AMALGAMATION tlse.c')
+    if res:
+        raise ValueError("build-all: step 'build-tlse' failed, error code " + str(res))
+
+def transpile_net_to_sepples():
+    print("build-all: transpile-net-to-sepples")
+    res = os.system('cd ' + project_path + 'src/net && ' + jakt_compiler_path + ' -S -R ' + jakt_runtime_path + ' -B ' + project_path + 'build/net -O net.jakt')
+    if res:
+        raise ValueError("build-all: step 'transpile-net-to-sepples' failed, error code " + str(res))
+
+def build_net():
+    print("build-all: build-net")
+    build_specific_options = '-Wno-invalid-offsetof -Wl,--section-start=.text=0x1404000 -Wl,--section-start=.plt=0x1402020 -no-pie'
+    res = os.system('cd ' + project_path + 'build/net && clang++-19 ' + build_specific_options + ' -O3 -I ' + jakt_runtime_path + ' -I ' + project_path + '/src/libtemple -fcolor-diagnostics -std=c++20 -fno-exceptions -Wno-user-defined-literals -Wno-deprecated-declarations -Wno-parentheses-equality -Wno-unqualified-std-cast-call -Wno-unknown-warning-option -Wno-int-to-pointer-cast -mno-red-zone -o ../bin/net *.cpp ../lib/libtemple.so ' + jakt_lib_path + 'libjakt_runtime_x86_64-unknown-linux-unknown.a ' + jakt_lib_path + 'libjakt_main_x86_64-unknown-linux-unknown.a && cd .. && rm -rf net')
+    if res:
+        raise ValueError("build-all: step 'build-net' failed, error code " + str(res))
+
+def address_string_for_symbol(file, symbol):
+    p = subprocess.Popen('readelf -s --wide "' + file + '" | grep \'' + symbol + '$\' | awk \'{sub("000000000", "0x", $2); print $2}\'', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    return str(p.communicate()[0][:-1].decode(encoding='utf-8'))
+
+def image_hc_fixup(macro, symbol, image_bin_path, image_hc_path):
+    os.system('echo -e "#define ' + macro + ' ' + address_string_for_symbol(image_bin_path, symbol) + '\n" | cat - ' + image_hc_path + ' | sponge ' + image_hc_path)
+    return
+
+def tlse_hc_fixup(macro, symbol, tlse_bin_path, tlse_hc_path):
+    os.system('echo -e "#define ' + macro + ' ' + address_string_for_symbol(tlse_bin_path, symbol) + '\n" | cat - ' + tlse_hc_path + ' | sponge ' + tlse_hc_path)
+    return
+
+def generate_iso_c_file():
+    print("build-all: generate-iso-c-file")
+    step_error_message = "build-all: step 'generate-iso-c-file' failed, error code "
+
+    res = os.system('isoc-mount --rw ' + isoc_file + ' ' + redsea_path)
+    if res:
+        raise ValueError(step_error_message + str(res))
+    time.sleep(0.25)
+
+    copy_files_cmd_line = 'rsync -av --inplace --progress ' + project_path + ' ' + redsea_path
+    copy_files_cmd_line += ' --exclude .clang-format'
+    copy_files_cmd_line += ' --exclude .git'
+    copy_files_cmd_line += ' --exclude .gitignore'
+    copy_files_cmd_line += ' --exclude .vscode'
+    copy_files_cmd_line += ' --exclude build/isoc'
+    copy_files_cmd_line += ' --exclude build/lib'
+    copy_files_cmd_line += ' --exclude build/redsea'
+    copy_files_cmd_line += ' --exclude scripts'
+    copy_files_cmd_line += ' --exclude src'
+    res = os.system(copy_files_cmd_line)
+    if res:
+        raise ValueError(step_error_message + str(res))
+
+    # Fixup addresses for Image.HC
+    image_bin_path = redsea_path + '/build/bin/image'
+    image_hc_path = redsea_path + '/System/Utilities/Image.HC'
+
+    image_hc_fixup('IMAGE_LOAD_GIF_FROM_MEMORY', 'image_load_gif_from_memory', image_bin_path, image_hc_path)
+    image_hc_fixup('STBI_WRITE_PNG_TO_MEM', 'stbi_write_png_to_mem', image_bin_path, image_hc_path)
+    image_hc_fixup('STBI_LOAD_FROM_MEMORY', 'stbi_load_from_memory', image_bin_path, image_hc_path)
+    image_hc_fixup('STBI_INFO_FROM_MEMORY', 'stbi_info_from_memory', image_bin_path, image_hc_path)
+    image_hc_fixup('STBI_FAILURE_REASON', 'stbi_failure_reason', image_bin_path, image_hc_path)
+    image_hc_fixup('RENDER_4BIT_FLOYDSTEIN', 'render_4bit_floydstein', image_bin_path, image_hc_path)
+
+    # Fixup addresses for Tlse.HC
+
+    rsa_hc_path = redsea_path + '/System/Libraries/Rsa.HC'
+    tlse_bin_path = redsea_path + '/build/bin/tlse'
+    tlse_hc_path = redsea_path + '/System/Libraries/Tlse.HC'
+
+    tlse_hc_fixup('RSA_IMPORT', 'rsa_import', tlse_bin_path, rsa_hc_path)
+    tlse_hc_fixup('RSA_CREATE_SIGNATURE', 'rsa_create_signature', tlse_bin_path, rsa_hc_path)
+    tlse_hc_fixup('RSA_VERIFY_SIGNATURE', 'rsa_verify_signature', tlse_bin_path, rsa_hc_path)
+    tlse_hc_fixup('TLS_CREATE_CONTEXT', 'tls_create_context', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_SNI_SET', 'tls_sni_set', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_CLIENT_CONNECT', 'tls_client_connect', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_CONNECTION_STATUS', 'tls_connection_status', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_GET_WRITE_BUFFER', 'tls_get_write_buffer', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_BUFFER_CLEAR', 'tls_buffer_clear', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_CONSUME_STREAM', 'tls_consume_stream', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_READ', 'tls_read', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_WRITE', 'tls_write', tlse_bin_path, tlse_hc_path)
+    tlse_hc_fixup('TLS_ESTABLISHED', 'tls_established', tlse_bin_path, tlse_hc_path)
+
+    time.sleep(0.25)
+
+    res = os.system('sync && fusermount -u ' + redsea_path)
+    if res:
+        raise ValueError(step_error_message + str(res))
+    time.sleep(0.25)
+
+def generate_slipstream_iso_file():
+    print("build-all: generate-slipstream-iso-file")
+    res = os.system('templeos-slipstream ' + templeos_iso_file + ' ' + isoc_file + ' ' + qemu_slipstream_iso_file)
+    if res:
+        raise ValueError("build-all: step 'generate-slipstream-iso-file' failed, error code " + str(res))
+
+def run():
+    print("build-all: run")
+    res = os.system(qemu_run_cmd)
+    if res:
+        raise ValueError("build-all: step 'run' failed, error code " + str(res))
+
+def build_all():
+    clang_format_src_files()
+    #refresh_build_path()
+    #build_image()
+    #build_libtemple()
+    #build_tlse()
+    #transpile_net_to_sepples()
+    #build_net()
+    generate_iso_c_file()
+    generate_slipstream_iso_file()
+    run()
+
+build_all()

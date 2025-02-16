@@ -1,0 +1,3 @@
+let lastFrameTime=0,fps=0;function calculateFPS(){requestAnimationFrame(()=>{const a=performance.now();fps=1E3/(a-lastFrameTime);lastFrameTime=a;calculateFPS()})}
+function updatePageHeader(){var a=new Date,c=a.toString().substring(0,3);const d=String(a.getMonth()+1).padStart(2,"0"),e=String(a.getDate()).padStart(2,"0");a=a.toString().substring(16,24);const f="CPU <b>"+(10*Math.random()).toFixed(0)+"</b>";if(navigator.userAgent.toLowerCase().includes("firefox"))var b=3735929054;else b=performance.memory,b=b.jsHeapSizeLimit-b.usedJSHeapSize;c=c+" "+d+"/"+e+" "+a+" FPS:"+fps.toFixed(0)+" Mem:"+b.toString(16).toUpperCase()+" "+f;document.getElementsByClassName("page-header")[0].innerHTML=
+c}calculateFPS();updatePageHeader();setInterval(updatePageHeader,300);
