@@ -175,12 +175,12 @@ def run():
 
 def build_all():
     clang_format_src_files()
-    #refresh_build_path()
-    #build_image()
-    #build_libtemple()
-    #build_tlse()
-    #transpile_net_to_sepples()
-    #build_net()
+    refresh_build_path()
+    build_image()
+    build_libtemple()
+    build_tlse()
+    transpile_net_to_sepples()
+    build_net()
     generate_iso_c_file()
     generate_slipstream_iso_file()
     run()
