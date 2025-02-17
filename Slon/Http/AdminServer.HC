@@ -227,6 +227,25 @@ U0 @slon_admin_settings_instance_get(SlonHttpSession* session, U8* buf)
     String.Append(buf, "<br><br><input type=submit value=Save></form>");
 }
 
+U0 @slon_admin_delete_account(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    if (!request_json->@("id"))
+        return;
+    I64 i;
+    JsonArray* accounts = db->a("accounts");
+    JsonObject* account = NULL;
+    for (i = 0; i < accounts->length; i++) {
+        account = accounts->o(i);
+        if (account && !StrICmp(request_json->@("id"), account->@("id"))) {
+            accounts->remove(i);
+            break;
+        }
+    }
+    @slon_db_save_to_disk;
+    @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+}
+
 U0 @slon_admin_new_account(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -273,6 +292,11 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
 
     if (!StrICmp("/info/stats", @slon_http_request_path(session))) {
         @slon_admin_info_stats(session);
+        return;
+    }
+
+    if (!StrICmp("/delete/account", @slon_http_request_path(session))) {
+        @slon_admin_delete_account(session);
         return;
     }
 

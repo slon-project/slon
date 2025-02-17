@@ -70,9 +70,9 @@
             const accounts = await response.json();
             let html = "<h4 class=\"title is-4\">Accounts</h4><div class=spacer></div>";
             if (accounts.length) {
-                html += "<table class=table><thead><tr><th>id</th><th>username</th></tr></head><tbody>";
+                html += "<table class=table><thead><tr><th>id</th><th>acct</th><th>display_name</th><th>type</th><th>delete</th></tr></head><tbody>";
                 for (let i = 0; i < accounts.length; i++) {
-                    html += "<tr><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["username"] + "</td><tr>";
+                    html += "<tr><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["acct"] + "</td><td>" + accounts[i]["display_name"] + "</td><td>"+ (accounts[i]["remote_actor"] == undefined ? "local" : "remote") + "</td><td style=\"text-align:center\"><a href=\"javascript:confirmDeleteUser('" + accounts[i]["acct"] + "','" + accounts[i]["id"] + "');\">&#10060;</a></td><tr>";
                 }
                 html += "</tbody></table>";
             } else {
@@ -81,6 +81,14 @@
             html += "<br><br><input onclick=manageNewUser() class=button type=button value=\"New User\">";
             setContent(html);
             setActiveLink("accounts");
+        }
+        async function confirmDeleteUser(user, id) {
+            if(confirm("Are you sure you want to delete '" + user + "' ?")) {
+                const request = new Request("/delete/account?id=" + id);
+                const response = await fetch(request);
+                const empty_json = await response.json();
+                manageAccounts();
+            }
         }
         function manageNewUser() {
             clearActiveLinks();
