@@ -1,3 +1,5 @@
+#define SLON_MISSING_ACCOUNT_AVATAR "https://slon-project.org/images/avatar-missing.png"
+
 #define SLON_DB_PATH "A:/db"
 
 JsonObject* db = Json.CreateObject();
