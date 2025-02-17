@@ -243,8 +243,14 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
     while (1) {
         switch (parser->stream[parser->pos]) {
         case '\\':
-            if (parser->state == JSON_STATE_OBJECT_STRING)
-                FifoU8Ins(parser->consumed, @json_unescape_char(parser->stream[++parser->pos]));
+            // NOTE: We keep escaped unicode in its original form, and let the program ingesting the JSON handle the UTF-8 conversion.
+            if (parser->state == JSON_STATE_OBJECT_STRING) {
+                if (parser->stream[parser->pos + 1] == 'u') {
+                    FifoU8Ins(parser->consumed, '\\');
+                } else {
+                    FifoU8Ins(parser->consumed, @json_unescape_char(parser->stream[++parser->pos]));
+                }
+            }
             break;
         case '}':
             switch (parser->state) {
@@ -484,8 +490,14 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
         }
         switch (parser->stream[parser->pos]) {
         case '\\':
-            if (parser->state == JSON_STATE_ARRAY_STRING)
-                FifoU8Ins(parser->consumed, @json_unescape_char(parser->stream[++parser->pos]));
+            // NOTE: We keep escaped unicode in its original form, and let the program ingesting the JSON handle the UTF-8 conversion.
+            if (parser->state == JSON_STATE_ARRAY_STRING) {
+                if (parser->stream[parser->pos + 1] == 'u') {
+                    FifoU8Ins(parser->consumed, '\\');
+                } else {
+                    FifoU8Ins(parser->consumed, @json_unescape_char(parser->stream[++parser->pos]));
+                }
+            }
             break;
         case ']':
             switch (parser->state) {
@@ -862,7 +874,14 @@ U0 @json_stringify_append_char_escape_quotes(U8* str, U8 char)
 U0 @json_stringify_append_str(U8* str, U8* str2)
 {
     while (*str2) {
-        @json_stringify_append_char_escape_quotes(str, *str2);
+        // NOTE: We keep escaped unicode in its original form, and let the program ingesting the JSON handle the UTF-8 conversion.
+        if (*str2 == '\\' && *(str2 + 1) == 'u') {
+            str[StrLen(str)] = '\\';
+            str[StrLen(str)] = 'u';
+            str2++;
+        } else {
+            @json_stringify_append_char_escape_quotes(str, *str2);
+        }
         str2++;
     }
 }
