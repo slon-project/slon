@@ -230,6 +230,8 @@ U0 @slon_admin_settings_instance_get(SlonHttpSession* session, U8* buf)
 U0 @slon_admin_delete_account(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
     if (!request_json->@("id"))
         return;
     I64 i;
