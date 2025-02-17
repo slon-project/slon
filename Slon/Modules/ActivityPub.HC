@@ -792,17 +792,6 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     return account;
 }
 
-U8* @slon_activitypub_format_content(U8* original_content)
-{
-    if (String.EndsWith("u003c/pu003e", original_content)) {
-        original_content[StrLen(original_content) - 12] = NULL;
-    }
-    if (String.BeginsWith("u003cpu003e", original_content)) {
-        return original_content + 11;
-    }
-    return original_content;
-}
-
 U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -879,7 +868,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
         new_status->set("id", id, JSON_STRING);
         new_status->set("created_at", request_json->@("published"), JSON_STRING);
-        new_status->set("content", @slon_activitypub_format_content(request_json->o("object")->@("content")), JSON_STRING);
+        new_status->set("content", request_json->o("object")->@("content"), JSON_STRING);
         new_status->set("visibility", "public", JSON_STRING);
         new_status->set("uri", request_json->o("object")->@("atomUri"), JSON_STRING);
         new_status->set("url", request_json->o("object")->@("url"), JSON_STRING);
