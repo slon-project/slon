@@ -812,10 +812,57 @@ U0 @json_stringify_append_char(U8* str, U8 char)
     }
 }
 
+U0 @json_stringify_append_char_escape_quotes(U8* str, U8 char)
+{
+    // FIXME: unicode
+    I64 len = StrLen(str);
+    switch (char) {
+    case '"':
+        str[len] = '\\';
+        str[len + 1] = '"';
+        str[len + 2] = NULL;
+        break;
+    case '\\':
+        str[len] = '\\';
+        str[len + 1] = '\\';
+        str[len + 2] = NULL;
+        break;
+    case 0x08:
+        str[len] = '\\';
+        str[len + 1] = 'b';
+        str[len + 2] = NULL;
+        break;
+    case 0x0c:
+        str[len] = '\\';
+        str[len + 1] = 'f';
+        str[len + 2] = NULL;
+        break;
+    case 0x0a:
+        str[len] = '\\';
+        str[len + 1] = 'n';
+        str[len + 2] = NULL;
+        break;
+    case 0x0d:
+        str[len] = '\\';
+        str[len + 1] = 'r';
+        str[len + 2] = NULL;
+        break;
+    case 0x09:
+        str[len] = '\\';
+        str[len + 1] = 't';
+        str[len + 2] = NULL;
+        break;
+    default:
+        str[len] = char;
+        str[len + 1] = NULL;
+        break;
+    }
+}
+
 U0 @json_stringify_append_str(U8* str, U8* str2)
 {
     while (*str2) {
-        @json_stringify_append_char(str, *str2);
+        @json_stringify_append_char_escape_quotes(str, *str2);
         str2++;
     }
 }
