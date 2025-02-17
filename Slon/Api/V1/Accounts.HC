@@ -3,13 +3,68 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn scratch_buffer;
 
+    I64 i;
+
     U8* path = @slon_strnew(session, @slon_http_request_path(session));
     I64 path_segments_count = 0;
     U8** path_segments = String.Split(path, '/', &path_segments_count);
 
     JsonObject* acct = NULL;
+    if (!StrICmp("relationships", path_segments[3])) {
+        if (@slon_api_authorized(session)) {
+            // FIXME: handle array of id[]=
 
-    if (!StrICmp("verify_credentials", path_segments[3])) {
+            JsonArray* relationships = Json.CreateArray();
+            if (request_json->@("id%5B%5D")) {
+                JsonObject* target_account = @slon_api_account_by_id(request_json->@("id%5B%5D"));
+                if (target_account) {
+                    Bool followed_by = FALSE;
+                    Bool following = FALSE;
+                    if (target_account->@("remote_actor")) {
+                        JsonObject* my_account = @slon_api_account_by_id(Json.Get(session->auth, "account_id"));
+                        JsonArray* my_followers = db->o("followers")->a(my_account->@("username"));
+                        if (my_followers) {
+                            for (i = 0; i < my_followers->length; i++) {
+                                if (my_followers->@(i) && !StrICmp(my_followers->@(i), target_account->@("remote_actor"))) {
+                                    followed_by = TRUE;
+                                    break;
+                                }
+                            }
+                        }
+                        JsonArray* my_following = db->o("following")->a(my_account->@("username"));
+                        if (my_following) {
+                            for (i = 0; i < my_following->length; i++) {
+                                if (my_following->@(i) && !StrICmp(my_following->@(i), target_account->@("remote_actor"))) {
+                                    following = TRUE;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    JsonObject* relationship = Json.CreateObject();
+                    relationship->set("id", target_account->@("id"), JSON_STRING);
+                    relationship->set("following", following, JSON_BOOLEAN);
+                    relationship->set("showing_reblogs", TRUE, JSON_BOOLEAN);
+                    relationship->set("notifying", FALSE, JSON_BOOLEAN);
+                    relationship->set("followed_by", followed_by, JSON_BOOLEAN);
+                    relationship->set("blocking", FALSE, JSON_BOOLEAN);
+                    relationship->set("blocked_by", FALSE, JSON_BOOLEAN);
+                    relationship->set("muting", FALSE, JSON_BOOLEAN);
+                    relationship->set("muting_notifications", FALSE, JSON_BOOLEAN);
+                    relationship->set("requested", FALSE, JSON_BOOLEAN);
+                    relationship->set("domain_blocking", FALSE, JSON_BOOLEAN);
+                    relationship->set("endorsed", FALSE, JSON_BOOLEAN);
+                    relationships->append(Json.CreateItem(relationship, JSON_OBJECT));
+                }
+            }
+
+            @slon_http_send_json(session, relationships);
+            Json.Delete(relationships);
+            goto slon_api_v1_accounts_get_return;
+        } else {
+            @slon_http_set_status_code(session, 401);
+        }
+    } else if (!StrICmp("verify_credentials", path_segments[3])) {
         if (@slon_api_authorized(session)) {
             SLON_AUTH_ACCOUNT_ID
             acct = @slon_api_account_by_id(account_id);
@@ -71,7 +126,6 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                 JsonObject* status = NULL;
 
                 if (status_array && status_array->length) {
-                    I64 i;
                     for (i = 0; i < status_array->length; i++) {
                         status = status_array->o(i);
                         status_id = Str2I64(status->@("id"));
