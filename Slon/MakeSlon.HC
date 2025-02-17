@@ -24,6 +24,7 @@ WinMax(Fs);
 
 #include "Api/V2/Filters";
 #include "Api/V2/Instance";
+#include "Api/V2/Search";
 #include "Api/V2/Suggestions";
 
 #include "Modules/ActivityPub";
