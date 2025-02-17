@@ -782,6 +782,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     account->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
     account->set("fields", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
     account->set("url", remote_actor, JSON_STRING);
+    account->set("remote_actor", remote_actor, JSON_STRING);
 
     db->a("accounts")->append(Json.CreateItem(account, JSON_OBJECT));
     // db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
