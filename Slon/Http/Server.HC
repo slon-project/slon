@@ -459,6 +459,7 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
 
     /* clang-format off */
 
+    #include "Endpoints/Post/Accounts";
     #include "Endpoints/Post/ActivityPub";
     #include "Endpoints/Post/Apps";
     #include "Endpoints/Post/OAuth";
