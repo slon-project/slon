@@ -84,3 +84,17 @@ JsonObject* @slon_api_account_by_username(U8* username)
     }
     return NULL;
 }
+
+JsonObject* @slon_api_account_by_remote_actor(U8* remote_actor)
+{
+    if (!remote_actor || !StrLen(remote_actor))
+        return NULL;
+    JsonArray* accts = db->a("accounts");
+    I64 i;
+    for (i = 0; i < accts->length; i++) {
+        if (accts->o(i)->@("remote_actor") && !StrICmp(accts->o(i)->@("remote_actor"), remote_actor)) {
+            return accts->o(i);
+        }
+    }
+    return NULL;
+}

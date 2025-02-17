@@ -706,6 +706,104 @@ U0 @slon_activitypub_delete_status_fedi(JsonObject* status)
 @slon_api_status_create_fedi = &@slon_activitypub_create_status_fedi;
 @slon_api_status_delete_fedi = &@slon_activitypub_delete_status_fedi;
 
+#define SLON_MISSING_ACCOUNT_AVATAR "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAxlBMVEUAAAAAAADU1EYAVVUAcXEAf38AhIQAjY0Al5cAqqoSZ14cRjgcY1QcY1Ucs6AlXksqFQAqPyoqf2MquJs4HAA4VTg4vJc/v5RLSyVUKgBURhxVKgBVRhxVxo1eLgBeQRJeQhJnQQlxOABxz4R/PwB/1H+EQQCEQgCNRgCN2XqUahWWZxKXSwCbjSqqVQCq4nG4cQ68ehK/vz+/6WrGjRzG7GfUqSrUqirU1EbU8GPZsy/ixjji9V7p1D/s2ULw4kb17Ev//1VZdizBAAAAA3RSTlM/f9T8WBWHAAABxUlEQVRIx5XVbV+CMBAAcAvMyNLM0Gyth8MZlR6aPZFW3vf/Uv0212rE0+7VYPffdjBGIygPv3sBEPr75kajNN1juA1gXiVoHYSgcn/M2ZFfBtpjnYgjNMHazSLQmvymAfy24yLg4d9gsWkWAWYBnEAF8DEbo3LQ/QegHIAj8KeOoIduYB8cwSE6gjNXAI7Aw7xgxYA5gj210yasNvBzJ8BjNxCXFJ0HYIwu4Bam6AL+fG91QGy9RsgBYcHqkTHGsAQsiOjJZE8ZFC3JzPBBtKqzlwyYE23wOpzUBSNcEd239N6tAS5lFW9BfXCqqqgBrnSVNyjXxKuB7mKAL0SU6OtRJdiBVyKidXYGMbTTOYE+12ekIgs6Yp0mgve36YOUNHjYVeOLTk4NIpV9SzHsL2VDdanlkDBLHMdWDfyZdKSRTHj61KMbwLLbe5iofB4EzRi/zOh5gA/U7Y54pkg2Tt6JaDPrmMdwmZ0hoVRw0y3k6B9zZj/m2Pqm+3cp0Tq544MgkvWvFoieDSD7iXIy8TiXIzYrQBBE26qTgTpZIfPHhrz/dEK07OujOMwczQb0rL2kSm/L+90CMPUb+We3bwPzns+Db3hhCosq/20dAAAAAElFTkSuQmCC"
+
+JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    U8* remote_actor = request_json->@("actor");
+    JsonObject* account = @slon_api_account_by_remote_actor(remote_actor);
+
+    if (account) {
+        return account;
+    }
+    account = Json.CreateObject();
+
+    HttpUrl* url = @http_parse_url(remote_actor);
+    if (!url) {
+        @slon_log(LOG_HTTPD, "Could not fetch actor, malformed url or unspecified error");
+        return NULL;
+    }
+
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    JsonObject* http_headers = Json.CreateObject();
+    http_headers->set("accept", "application/json", JSON_STRING);
+    @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
+
+    if (!resp) {
+        @slon_log(LOG_HTTPD, "Could not fetch actor, invalid response from remote server");
+        Free(fetch_buffer);
+        return NULL;
+    }
+
+    while (resp->state != HTTP_STATE_DONE) {
+        Sleep(1);
+    }
+
+    if (!resp->body.length) {
+        @slon_log(LOG_HTTPD, "Could not fetch actor, empty response from remote server");
+        Free(fetch_buffer);
+        return NULL;
+    }
+
+    Free(fetch_buffer);
+
+    JsonObject* actor_object = Json.Parse(resp->body.data);
+
+    U8* id = @slon_api_generate_unique_id(session);
+    U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
+
+    account->set("id", id, JSON_STRING);
+    account->set("created_at", created_at, JSON_STRING);
+    account->set("username", actor_object->@("preferredUsername"), JSON_STRING);
+    StrPrint(scratch_buffer, "%s@%s", actor_object->@("preferredUsername"), url->host);
+    account->set("acct", scratch_buffer, JSON_STRING);
+    account->set("display_name", actor_object->@("name"), JSON_STRING);
+    account->set("email", "", JSON_STRING);
+    account->set("note", actor_object->@("summary"), JSON_STRING);
+    if (actor_object->@("icon")) {
+        account->set("avatar", actor_object->o("icon")->@("url"), JSON_STRING);
+        account->set("avatar_static", actor_object->o("icon")->@("url"), JSON_STRING);
+    } else {
+        account->set("avatar", SLON_MISSING_ACCOUNT_AVATAR, JSON_STRING);
+        account->set("avatar_static", SLON_MISSING_ACCOUNT_AVATAR, JSON_STRING);
+    }
+    account->set("header", "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", JSON_STRING);
+    account->set("header_static", "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", JSON_STRING);
+    account->set("last_status_at", "0", JSON_STRING);
+    account->set("followers_count", 0, JSON_NUMBER);
+    account->set("following_count", 0, JSON_NUMBER);
+    account->set("statuses_count", 0, JSON_NUMBER);
+    account->set("locked", FALSE, JSON_BOOLEAN);
+    account->set("bot", FALSE, JSON_BOOLEAN);
+    account->set("discoverable", FALSE, JSON_BOOLEAN);
+    account->set("indexable", FALSE, JSON_BOOLEAN);
+    account->set("hide_collections", FALSE, JSON_BOOLEAN);
+    account->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    account->set("fields", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    account->set("url", remote_actor, JSON_STRING);
+
+    db->a("accounts")->append(Json.CreateItem(account, JSON_OBJECT));
+    // db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
+    @slon_db_save_to_disk;
+
+    @slon_free(session, created_at);
+    @slon_free(session, id);
+
+    return account;
+}
+
+U8* @slon_activitypub_format_content(U8* original_content)
+{
+    if (String.EndsWith("u003c/pu003e", original_content)) {
+        original_content[StrLen(original_content) - 12] = NULL;
+    }
+    if (String.BeginsWith("u003cpu003e", original_content)) {
+        return original_content + 11;
+    }
+    return original_content;
+}
+
 U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -735,6 +833,76 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             account->set("followers_count", account->@("followers_count") + 1);
             @slon_db_save_to_disk;
         }
+    }
+
+    if (!StrICmp("create", request_json->@("type"))) {
+        JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session);
+
+        JsonObject* new_status = Json.CreateObject();
+        U8* id = @slon_api_generate_unique_id(session);
+
+        JsonArray* media_attachments = Json.CreateArray();
+        if (request_json->o("object")->@("attachment")) {
+            JsonObject* attachment_item = NULL;
+            JsonObject* media_attachment = NULL;
+            JsonObject* media_meta = NULL;
+            JsonArray* attachment_array = request_json->o("object")->@("attachment");
+            for (i = 0; i < attachment_array->length; i++) {
+                attachment_item = attachment_array->o(i);
+                if (attachment_item && attachment_item->@("mediaType") && String.BeginsWith("image", attachment_item->@("mediaType"))) {
+                    media_attachment = Json.CreateObject();
+                    media_meta = Json.CreateObject();
+                    media_attachment->set("id", "", JSON_STRING);
+                    media_attachment->set("type", "image", JSON_STRING);
+                    media_attachment->set("url", attachment_item->@("url"), JSON_STRING);
+                    media_attachment->set("preview_url", NULL, JSON_NULL);
+                    media_attachment->set("remote_url", NULL, JSON_NULL);
+                    if (attachment_item->@("width") && attachment_item->@("height")) {
+                        media_meta->set("original", Json.CreateObject(), JSON_OBJECT);
+                        media_meta->o("original")->set("width", attachment_item->@("width"), JSON_NUMBER);
+                        media_meta->o("original")->set("height", attachment_item->@("height"), JSON_NUMBER);
+                    }
+                    if (attachment_item->@("summary")) {
+                        media_attachment->set("description", attachment_item->@("summary"), JSON_STRING);
+                    } else {
+                        media_attachment->set("description", NULL, JSON_NULL);
+                    }
+                    if (attachment_item->@("blurhash")) {
+                        media_attachment->set("blurhash", attachment_item->@("blurhash"), JSON_STRING);
+                    } else {
+                        media_attachment->set("blurhash", NULL, JSON_NULL);
+                    }
+                    media_attachment->set("meta", media_meta, JSON_OBJECT);
+                    media_attachments->append(Json.CreateItem(media_attachment, JSON_OBJECT));
+                }
+            }
+        }
+
+        new_status->set("id", id, JSON_STRING);
+        new_status->set("created_at", request_json->@("published"), JSON_STRING);
+        new_status->set("content", @slon_activitypub_format_content(request_json->o("object")->@("content")), JSON_STRING);
+        new_status->set("visibility", "public", JSON_STRING);
+        new_status->set("uri", request_json->o("object")->@("atomUri"), JSON_STRING);
+        new_status->set("url", request_json->o("object")->@("url"), JSON_STRING);
+        new_status->set("account", remote_account, JSON_OBJECT);
+        // new_status->set("application", status_app, JSON_OBJECT);
+        new_status->set("reblogs_count", 0, JSON_NUMBER);
+        new_status->set("favourites_count", 0, JSON_NUMBER);
+        new_status->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        new_status->set("tags", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        new_status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        new_status->set("media_attachments", media_attachments, JSON_ARRAY);
+        new_status->set("replies_count", 0, JSON_NUMBER);
+        new_status->set("spoiler_text", "", JSON_STRING);
+        new_status->set("sensitive", request_json->o("object")->@("sensitive"), JSON_BOOLEAN);
+
+        if (!db->o("timelines")->o("home")->a(account->@("id"))) {
+            db->o("timelines")->o("home")->set(account->@("id"), Json.CreateArray(), JSON_ARRAY);
+        }
+        db->o("timelines")->o("home")->a(account->@("id"))->append(Json.CreateItem(new_status, JSON_OBJECT));
+
+        @slon_db_save_timelines_to_disk;
+        @slon_free(session, id);
     }
 
     if (!StrICmp("like", request_json->@("type"))) {
