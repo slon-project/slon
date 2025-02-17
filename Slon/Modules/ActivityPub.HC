@@ -367,12 +367,11 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
     Free(fetch_buffer);
 }
 
-U0 @slon_activitypub_async_create_status(JsonObject* status)
+U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
 {
     Sleep(2000);
     U8 scratch_buffer[2048];
 
-    U8* dest = "https://techhub.social/users/ryeucrvtexw3/inbox";
     U8* this_actor = StrNew(status->@("uri"), adam_task);
     StrFind("/statuses/", this_actor)[0] = NULL;
 
@@ -421,7 +420,8 @@ U0 @slon_activitypub_async_create_status(JsonObject* status)
 
     JsonObject* http_headers = Json.CreateObject();
 
-    HttpUrl* url = @http_parse_url(dest);
+    StrPrint(scratch_buffer, "%s/inbox", dest);
+    HttpUrl* url = @http_parse_url(scratch_buffer);
 
     CDateStruct ds;
     Date2Struct(&ds, Now + 1043910000);
@@ -493,12 +493,23 @@ U0 @slon_activitypub_async_create_status(JsonObject* status)
     Free(fetch_buffer);
 }
 
-U0 @slon_activitypub_async_delete_status(JsonObject* status)
+U0 @slon_activitypub_async_create_status(JsonObject* status)
+{
+    I64 i;
+    JsonArray* followers = db->o("followers")->a(status->o("account")->@("username"));
+    if (!followers) {
+        return;
+    }
+    for (i = 0; i < followers->length; i++) {
+        @slon_activitypub_async_create_status_to(status, followers->@(i));
+    }
+}
+
+U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
 {
     Sleep(2000);
     U8 scratch_buffer[2048];
 
-    U8* dest = "https://techhub.social/users/ryeucrvtexw3/inbox";
     U8* this_actor = StrNew(status->@("uri"), adam_task);
     StrFind("/statuses/", this_actor)[0] = NULL;
 
@@ -525,7 +536,8 @@ U0 @slon_activitypub_async_delete_status(JsonObject* status)
 
     JsonObject* http_headers = Json.CreateObject();
 
-    HttpUrl* url = @http_parse_url(dest);
+    StrPrint(scratch_buffer, "%s/inbox", dest);
+    HttpUrl* url = @http_parse_url(scratch_buffer);
 
     CDateStruct ds;
     Date2Struct(&ds, Now + 1043910000);
@@ -595,6 +607,18 @@ U0 @slon_activitypub_async_delete_status(JsonObject* status)
     AdamLog("code: %d\n", resp->status.code);
 
     Free(fetch_buffer);
+}
+
+U0 @slon_activitypub_async_delete_status(JsonObject* status)
+{
+    I64 i;
+    JsonArray* followers = db->o("followers")->a(status->o("account")->@("username"));
+    if (!followers) {
+        return;
+    }
+    for (i = 0; i < followers->length; i++) {
+        @slon_activitypub_async_delete_status_to(status, followers->@(i));
+    }
 }
 
 U0 @slon_activitypub_create_status_fedi(JsonObject* status)
