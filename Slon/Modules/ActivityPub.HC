@@ -806,6 +806,8 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
     JsonObject* status = NULL;
 
+    JsonObject* request_object = NULL;
+
     if (!StrICmp("follow", request_json->@("type"))) {
         if (!db->o("followers")->@(user)) {
             db->o("followers")->set(user, Json.CreateArray(), JSON_ARRAY);
@@ -821,6 +823,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             account->set("followers_count", account->@("followers_count") + 1);
             @slon_db_save_to_disk;
         }
+        request_object = Json.Clone(request_json);
     }
 
     if (!StrICmp("create", request_json->@("type"))) {
@@ -891,6 +894,12 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
         @slon_db_save_timelines_to_disk;
         @slon_free(session, id);
+        request_object = Json.CreateObject();
+        request_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
+        request_object->set("id", request_json->@("id"), JSON_STRING);
+        request_object->set("type", request_json->@("type"), JSON_STRING);
+        request_object->set("actor", request_json->@("actor"), JSON_STRING);
+        request_object->set("object", db->o("actors")->o(user)->@("id"), JSON_STRING);
     }
 
     if (!StrICmp("like", request_json->@("type"))) {
@@ -904,12 +913,15 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             }
         }
         @slon_db_save_statuses_to_disk;
+        request_object = Json.Clone(request_json);
     }
 
-    JsonObject* o = Json.CreateObject();
-    o->set("user", user, JSON_STRING);
-    o->set("request", Json.Clone(request_json), JSON_OBJECT);
-    Spawn(&@slon_activitypub_async_accept_request, o, "SlonAsyncAcceptTask");
+    if (request_object) {
+        JsonObject* o = Json.CreateObject();
+        o->set("user", user, JSON_STRING);
+        o->set("request", request_object, JSON_OBJECT);
+        Spawn(&@slon_activitypub_async_accept_request, o, "SlonAsyncAcceptTask");
+    }
 
     @slon_http_set_status_code(session, 200);
     return;
