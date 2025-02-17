@@ -57,6 +57,20 @@ JsonObject* @slon_api_account_by_email(U8* email)
     return NULL;
 }
 
+JsonObject* @slon_api_account_by_acct(U8* acct)
+{
+    if (!acct || !StrLen(acct))
+        return NULL;
+    JsonArray* accts = db->a("accounts");
+    I64 i;
+    for (i = 0; i < accts->length; i++) {
+        if (!StrICmp(accts->o(i)->@("acct"), acct)) {
+            return accts->o(i);
+        }
+    }
+    return NULL;
+}
+
 JsonObject* @slon_api_account_by_id(U8* id)
 {
     if (!id || !StrLen(id))
