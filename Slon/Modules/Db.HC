@@ -64,6 +64,26 @@ U0 @slon_db_load_followers_from_disk()
     db->set("followers", followers, JSON_OBJECT);
 }
 
+U0 @slon_db_load_following_from_disk()
+{
+    JsonObject* following = Json.CreateObject();
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/following/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonArray* following_array = NULL;
+    while (de) {
+        following_array = Json.ParseFile(de->full_name);
+        if (following_array) {
+            StrFind(".json", de->name)[0] = NULL;
+            following->set(de->name, following_array, JSON_ARRAY);
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("following", following, JSON_OBJECT);
+}
+
 U0 @slon_db_load_statuses_from_disk()
 {
     JsonObject* statuses = Json.CreateObject();
@@ -161,6 +181,17 @@ U0 @slon_db_save_followers_to_disk()
     }
 }
 
+U0 @slon_db_save_following_to_disk()
+{
+    U8 scratch_buffer[256];
+    JsonKey* key = db->o("following")->keys;
+    while (key) {
+        StrPrint(scratch_buffer, "%s/following/%s.json", SLON_DB_PATH, key->name);
+        Json.DumpToFile(scratch_buffer, key->value);
+        key = key->next;
+    }
+}
+
 U0 @slon_db_save_statuses_to_disk()
 {
     U8 scratch_buffer[256];
@@ -189,6 +220,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_actors_to_disk();
     @slon_db_save_apps_to_disk();
     @slon_db_save_followers_to_disk();
+    @slon_db_save_following_to_disk();
     @slon_db_save_instance_to_disk();
     @slon_db_save_oauth_to_disk();
     @slon_db_save_private_keys_to_disk();
@@ -206,6 +238,7 @@ U0 @slon_db_load_from_defaults()
     db->set("private_keys_binary", Json.CreateObject(), JSON_OBJECT);
     db->set("public_keys", Json.CreateObject(), JSON_OBJECT);
     db->set("followers", Json.CreateObject(), JSON_OBJECT);
+    db->set("following", Json.CreateObject(), JSON_OBJECT);
     db->set("instance", Json.ParseFile("M:/Slon/Static/defaults/instance.json"), JSON_OBJECT);
     db->set("statuses", Json.CreateObject(), JSON_OBJECT);
     db->set("timelines", Json.CreateObject(), JSON_OBJECT);
@@ -229,6 +262,7 @@ U0 @slon_db_load_from_disk()
     db->set("private_keys_binary", Json.CreateObject(), JSON_OBJECT);
     db->set("public_keys", Json.CreateObject(), JSON_OBJECT);
     @slon_db_load_followers_from_disk();
+    @slon_db_load_following_from_disk();
     @slon_db_load_instance_from_disk();
     @slon_db_load_oauth_from_disk();
     @slon_db_load_statuses_from_disk();
