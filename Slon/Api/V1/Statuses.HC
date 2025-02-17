@@ -22,17 +22,19 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
 
         U8* id = path_segments[3];
         JsonObject* status;
+        JsonObject* fedi_status;
 
         I64 i;
         for (i = 0; i < statuses->length; i++) {
             status = statuses->@(i);
             if (!StrICmp(status->@("id"), id)) {
+                fedi_status = Json.Clone(status);
                 status->set("deleted", TRUE, JSON_BOOLEAN);
                 @slon_db_save_statuses_to_disk;
                 @slon_db_instance_decrement_status_count;
                 @slon_db_save_instance_to_disk;
                 if (@slon_api_status_delete_fedi) {
-                    @slon_api_status_delete_fedi(Json.Clone(status));
+                    @slon_api_status_delete_fedi(fedi_status);
                 }
                 goto slon_api_v1_statuses_delete_return;
             }
