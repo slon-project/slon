@@ -21,6 +21,13 @@
     Free(request_json_str);
 
 JsonObject* SLON_HTTP_STATUS_CODES = Json.ParseFile("M:/Slon/Settings/status_codes.json");
+JsonArray* SLON_TLDS = Json.ParseFile("M:/Slon/Settings/tlds.json");
+
+I64 tld_cnt = 0;
+U8** tld_array = CAlloc(sizeof(U8*) * SLON_TLDS->length);
+for (tld_cnt = 0; tld_cnt < SLON_TLDS->length; tld_cnt++) {
+    tld_array[tld_cnt] = SLON_TLDS->@(tld_cnt);
+}
 
 class SlonHttpBuffer {
     U8* data;
