@@ -125,6 +125,7 @@ U0 @slon_api_v1_timelines_get(SlonHttpSession* session)
         @slon_http_set_status_code(session, 404);
     } else {
         @slon_http_set_status_code(session, 401);
+        return;
     }
 slon_api_v1_timelines_get_return:
     Free(path_segments);
