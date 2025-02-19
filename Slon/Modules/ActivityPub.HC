@@ -73,15 +73,17 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         }
     }
 
-    // 3. Confirm actor matches keyId
+    // 3. Confirm actor and keyId are present
     if (!request_json->@("actor")) {
         AdamLog("[verify_signature] actor is not present in request\n");
         return FALSE;
     }
-    if (!String.BeginsWith(request_json->@("actor"), keyId)) {
-        AdamLog("[verify_signature] actor does not match keyId\n");
+    if (!keyId) {
+        AdamLog("[verify_signature] keyId is not present in signature\n");
         return FALSE;
     }
+    session->actor_for_key_id = @slon_strnew(session, keyId);
+    StrFind("#", session->actor_for_key_id)[0] = NULL;
 
     // Check if public key is cached for keyId, if not, fetch it
     if (!db->o("public_keys")->@(keyId)) {
@@ -725,7 +727,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn scratch_buffer;
 
-    I64 i;
+    I64 i, j;
     JsonObject* account = @slon_api_account_by_username(user);
 
     Bool already_following = FALSE;
@@ -737,6 +739,10 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     JsonObject* request_object = NULL;
 
     if (!StrICmp("follow", request_json->@("type"))) {
+        if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
+            @slon_http_set_status_code(session, 401);
+            return;
+        }
         if (!db->o("followers")->@(user)) {
             db->o("followers")->set(user, Json.CreateArray(), JSON_ARRAY);
         }
@@ -755,6 +761,79 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     }
 
     if (!StrICmp("create", request_json->@("type"))) {
+        Bool should_accept = FALSE;
+
+        // If actor_for_key_id is: someone user is following
+        JsonArray* iter_following = db->o("following")->a(user);
+        if (iter_following) {
+            for (i = 0; i < iter_following->length; i++) {
+                if (!StrICmp(session->actor_for_key_id, iter_following->@(i))) {
+                    should_accept = TRUE;
+                    break;
+                }
+            }
+        }
+
+        // or, actor_for_key_id is: creating object to:, cc: user
+        JsonArray* iter_actors = NULL;
+        if (!should_accept) {
+            JsonObject* me_actor = db->o("actors")->@(user);
+            if (me_actor) {
+                iter_actors = request_json->o("object")->a("to");
+                if (iter_actors) {
+                    for (i = 0; i < iter_actors->length; i++) {
+                        if (!StrICmp(me_actor->@("id"), iter_actors->@(i))) {
+                            should_accept = TRUE;
+                            break;
+                        }
+                    }
+                }
+                iter_actors = request_json->o("object")->a("cc");
+                if (iter_actors) {
+                    for (i = 0; i < iter_actors->length; i++) {
+                        if (!StrICmp(me_actor->@("id"), iter_actors->@(i))) {
+                            should_accept = TRUE;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // or, actor_for_key_id is: creating object to:, cc: someone user is following
+        if (!should_accept && iter_following) {
+            iter_actors = request_json->o("object")->a("to");
+            if (iter_actors) {
+                for (i = 0; i < iter_actors->length; i++) {
+                    for (j = 0; j < iter_following->length; j++) {
+                        if (!StrICmp(iter_actors->@(i), iter_following->@(j))) {
+                            should_accept = TRUE;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!should_accept && iter_following) {
+            iter_actors = request_json->o("object")->a("cc");
+            if (iter_actors) {
+                for (i = 0; i < iter_actors->length; i++) {
+                    for (j = 0; j < iter_following->length; j++) {
+                        if (!StrICmp(iter_actors->@(i), iter_following->@(j))) {
+                            should_accept = TRUE;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // otherwise, 401
+        if (!should_accept) {
+            @slon_http_set_status_code(session, 401);
+            return;
+        }
+
         JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session);
 
         JsonObject* new_status = Json.CreateObject();
@@ -831,6 +910,10 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     }
 
     if (!StrICmp("like", request_json->@("type"))) {
+        if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
+            @slon_http_set_status_code(session, 401);
+            return;
+        }
         U8* status_id = StrFind("/", StrFind("/statuses/", request_json->@("object")) + 1) + 1;
         statuses = db->o("statuses")->a(account->@("id"));
         for (i = 0; i < statuses->length; i++) {
@@ -857,10 +940,8 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
 U0 @slon_activitypub_users_post(SlonHttpSession* session)
 {
-    if (!@slon_activitypub_http_signature_is_valid(session)) {
-        @slon_http_set_status_code(session, 401);
-        return;
-    }
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
 
     U8* path = @slon_strnew(session, @slon_http_request_path(session));
     I64 path_segments_count = 0;
@@ -880,6 +961,22 @@ U0 @slon_activitypub_users_post(SlonHttpSession* session)
 
     U8* method = path_segments[2];
     if (!StrICmp("inbox", method)) {
+        if (!request_json) {
+            @slon_http_set_status_code(session, 400);
+            goto slon_activitypub_users_post_return;
+        }
+        if (!request_json->@("type")) {
+            @slon_http_set_status_code(session, 400);
+            goto slon_activitypub_users_post_return;
+        }
+        if (!StrICmp("delete", request_json->@("type"))) {
+            @slon_http_set_status_code(session, 400);
+            goto slon_activitypub_users_post_return;
+        }
+        if (!@slon_activitypub_http_signature_is_valid(session)) {
+            @slon_http_set_status_code(session, 401);
+            goto slon_activitypub_users_post_return;
+        }
         @slon_activitypub_users_inbox(session, user);
         goto slon_activitypub_users_post_return;
     }
@@ -887,5 +984,9 @@ U0 @slon_activitypub_users_post(SlonHttpSession* session)
     @slon_http_set_status_code(session, 404);
 
 slon_activitypub_users_post_return:
+    if (session->actor_for_key_id) {
+        @slon_free(session, session->actor_for_key_id);
+    }
+    Free(path_segments);
     @slon_free(session, path);
 }
