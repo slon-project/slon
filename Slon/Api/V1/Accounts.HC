@@ -297,7 +297,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                 JsonObject* status = NULL;
 
                 if (status_array && status_array->length) {
-                    for (i = 0; i < status_array->length; i++) {
+                    for (i = status_array->length - 1; i > -1; i--) {
                         status = status_array->o(i);
                         status_id = Str2I64(status->@("id"));
                         exclude_status = FALSE;
