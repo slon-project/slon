@@ -88,11 +88,15 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
     // Check if public key is cached for keyId, if not, fetch it
     if (!db->o("public_keys")->@(keyId)) {
 
-        @slon_log(LOG_HTTPD, "Actor's public key is not cached, attempting to fetch");
+        @slon_log(LOG_HTTPD, "Signatory's public key is not cached, attempting to fetch");
 
-        HttpUrl* url = @http_parse_url(request_json->@("actor"));
+        U8* signatory_url_string = @slon_strnew(session, keyId);
+        StrFind("#", signatory_url_string)[0] = NULL;
+
+        HttpUrl* url = @http_parse_url(signatory_url_string);
+        @slon_free(session, signatory_url_string);
         if (!url) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, malformed url or unspecified error");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, malformed url or unspecified error");
             return FALSE;
         }
 
@@ -102,7 +106,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
 
         if (!resp) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, invalid response from remote server");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, invalid response from remote server");
             Free(fetch_buffer);
             return FALSE;
         }
@@ -112,44 +116,40 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         }
 
         if (!resp->body.length) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, empty response from remote server");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, empty response from remote server");
             Free(fetch_buffer);
             return FALSE;
         }
 
+        JsonObject* user_object = Json.Parse(resp->body.data);
         Free(fetch_buffer);
 
-        JsonObject* user_object = Json.Parse(resp->body.data);
         if (!user_object) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, user object not present in response from remote server");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, user object not present in response from remote server");
             return FALSE;
         }
 
         JsonObject* pubkey_object = user_object->@("publicKey");
         if (!pubkey_object) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, publicKey object not present in user object");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, publicKey object not present in user object");
             return FALSE;
         }
 
         if (!pubkey_object->@("id")) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, id not present in publicKey object");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, id not present in publicKey object");
             return FALSE;
         }
         if (!pubkey_object->@("owner")) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, owner not present in publicKey object");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, owner not present in publicKey object");
             return FALSE;
         }
         if (!pubkey_object->@("publicKeyPem")) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, publicKeyPem not present in publicKey object");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, publicKeyPem not present in publicKey object");
             return FALSE;
         }
 
         if (StrICmp(pubkey_object->@("id"), keyId)) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, keyId does not match id present in publicKey object");
-            return FALSE;
-        }
-        if (StrICmp(pubkey_object->@("owner"), request_json->@("actor"))) {
-            @slon_log(LOG_HTTPD, "Could not fetch actor's public key, actor does not match owner present in publicKey object");
+            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, keyId does not match id present in publicKey object");
             return FALSE;
         }
 
