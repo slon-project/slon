@@ -395,14 +395,29 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     note_object->set("id", status->@("uri"), JSON_STRING);
     note_object->set("type", "Note", JSON_STRING);
     note_object->set("summary", NULL, JSON_NULL);
-    note_object->set("inReplyTo", NULL, JSON_NULL);
     note_object->set("published", status->@("created_at"), JSON_STRING);
     note_object->set("attributedTo", this_actor, JSON_STRING);
     note_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]"), JSON_ARRAY);
     note_object->set("cc", cc, JSON_ARRAY);
     note_object->set("sensitive", status->@("sensitive"), JSON_BOOLEAN);
     note_object->set("atomUri", status->@("uri"), JSON_STRING);
-    note_object->set("inReplyToAtomUri", NULL, JSON_NULL);
+    if (status->@("in_reply_to_id")) {
+        // lookup status uri in user's home timeline
+        JsonArray* lookup_array = db->o("timelines")->o("home")->a(status->o("account")->@("id"));
+        if (lookup_array) {
+            I64 i;
+            for (i = 0; i < lookup_array->length; i++) {
+                if (!StrICmp(status->@("in_reply_to_id"), lookup_array->o(i)->@("id"))) {
+                    note_object->set("inReplyTo", lookup_array->o(i)->@("uri"), JSON_STRING);
+                    note_object->set("inReplyToAtomUri", lookup_array->o(i)->@("uri"), JSON_STRING);
+                    break;
+                }
+            }
+        }
+    } else {
+        note_object->set("inReplyTo", NULL, JSON_NULL);
+        note_object->set("inReplyToAtomUri", NULL, JSON_NULL);
+    }
     note_object->set("content", status->@("content"), JSON_STRING);
     JsonObject* content_map = Json.CreateObject();
     content_map->set("en", status->@("content"), JSON_STRING);
