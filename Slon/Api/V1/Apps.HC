@@ -65,7 +65,7 @@ U0 @slon_api_v1_apps_post(SlonHttpSession* session)
     db->o("apps")->set(client_id, credential_app, JSON_OBJECT);
     @slon_db_save_apps_to_disk;
 
-    @slon_http_send_json(session, credential_app);
+    session->send(credential_app);
 
     @slon_free(session, id);
     @slon_free(session, client_id);

@@ -8,7 +8,7 @@ U0 @slon_oauth_well_known(SlonHttpSession* session)
     StrPrint(scratch_buffer, "{\"issuer\":\"https://%s\",\"authorization_endpoint\":\"https://%s/oauth/authorize\",\"response_types_supported\":[\"code\"],\"app_registration_endpoint\":\"https://%s/api/v1/apps\"}",
         db->o("instance")->@("uri"), db->o("instance")->@("uri"), db->o("instance")->@("uri"));
     @slon_http_set_content_type(session, "application/json; charset=utf-8");
-    @slon_http_send_string(session, scratch_buffer);
+    session->send(scratch_buffer);
 }
 
 U0 @slon_oauth_fetch_token(U8* client_id)
@@ -132,7 +132,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                 StrPrint(scratch_buffer, "%s?code=%s", redirect_uri, authorization_code);
                 JsonObject* redirect_uri_object = Json.CreateObject();
                 redirect_uri_object->set("redirect_uri", scratch_buffer, JSON_STRING);
-                @slon_http_send_json(session, redirect_uri_object);
+                session->send(redirect_uri_object);
                 Json.Delete(redirect_uri_object);
 
                 @slon_free(session, authorization_code);
@@ -178,7 +178,7 @@ U0 @slon_oauth_token_post(SlonHttpSession* session)
     if (!StrCmp(client_id, code_object->@("client_id")) && !StrCmp(client_secret, code_object->@("client_secret"))) {
         JsonObject* token = db->o("oauth")->o("tokens")->@(access_token);
         if (token) {
-            @slon_http_send_json(session, token);
+            session->send(token);
         } else {
             // If the token doesn't exist, Page Expired?
             session->status(419);

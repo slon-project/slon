@@ -1,5 +1,5 @@
 if (!StrICmp("/api/v1/instance", @slon_http_request_path(session))) {
-    @slon_http_send_json(session, db->o("instance"));
+    session->send(db->o("instance"));
     return;
 }
 

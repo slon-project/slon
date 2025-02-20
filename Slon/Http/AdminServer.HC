@@ -245,7 +245,7 @@ U0 @slon_admin_delete_account(SlonHttpSession* session)
         }
     }
     @slon_db_save_to_disk;
-    @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+    session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
 U0 @slon_admin_new_account(SlonHttpSession* session)
@@ -255,16 +255,16 @@ U0 @slon_admin_new_account(SlonHttpSession* session)
     if (db->o("actors")->@(request_json->@("username"))) {
         StrPrint(scratch_buffer, "{\"error\":\"account already exists\"}");
         @slon_http_set_content_type(session, "application/json");
-        @slon_http_send(session, scratch_buffer, StrLen(scratch_buffer));
+        session->send(scratch_buffer, StrLen(scratch_buffer));
     } else {
         @slon_admin_create_account(session);
-        @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+        session->send(SLON_EMPTY_JSON_OBJECT);
     }
 }
 
 U0 @slon_admin_manage_accounts(SlonHttpSession* session)
 {
-    @slon_http_send_json(session, db->a("accounts"));
+    session->send(db->a("accounts"));
 }
 
 U0 @slon_admin_info_stats(SlonHttpSession* session)
@@ -277,7 +277,7 @@ U0 @slon_admin_info_stats(SlonHttpSession* session)
     String.Append(scratch_buffer, "}");
 
     @slon_http_set_content_type(session, "application/json");
-    @slon_http_send(session, scratch_buffer, StrLen(scratch_buffer));
+    session->send(scratch_buffer, StrLen(scratch_buffer));
 }
 
 U0 @slon_admin_server_get(SlonHttpSession* session)
@@ -330,7 +330,7 @@ U0 @slon_admin_setup_instance(SlonHttpSession* session)
     @slon_db_save_to_disk;
     db->set("setup", TRUE);
 
-    @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+    session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
 U0 @slon_admin_server_post(SlonHttpSession* session)

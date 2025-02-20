@@ -107,7 +107,7 @@ U0 @slon_local_server_directory_listing(SlonHttpSession* session, U8* path)
     String.Append(html, "</body></html>");
 
     @slon_http_set_content_type(session, "text/html");
-    @slon_http_send(session, html, StrLen(html));
+    session->send(html, StrLen(html));
     @slon_free(session, html);
 }
 
@@ -115,7 +115,7 @@ U0 @slon_local_server_not_found(SlonHttpSession* session)
 {
     session->status(404);
     @slon_http_set_content_type(session, "text/html");
-    @slon_http_send(session, "<h2>404 Not Found</h2>", 22);
+    session->send("<h2>404 Not Found</h2>", 22);
 }
 
 U0 @slon_local_server_get(SlonHttpSession* session)

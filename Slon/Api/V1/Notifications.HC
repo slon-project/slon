@@ -6,9 +6,9 @@ U0 @slon_api_v1_notifications_get(SlonHttpSession* session)
         // SLON_AUTH_ACCOUNT_ID
         // FIXME: Implement this
         if (String.EndsWith("policy", @slon_http_request_path(session))) {
-            @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+            session->send(SLON_EMPTY_JSON_OBJECT);
         } else {
-            @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+            session->send(SLON_EMPTY_JSON_ARRAY);
         }
     } else {
         session->status(401);

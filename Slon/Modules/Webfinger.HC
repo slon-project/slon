@@ -28,7 +28,7 @@ U0 @slon_webfinger(SlonHttpSession* session)
             links->append(Json.CreateItem(link_object, JSON_OBJECT));
             webfinger_object->set("links", links, JSON_ARRAY);
 
-            @slon_http_send_json(session, webfinger_object);
+            session->send(webfinger_object);
             Json.Delete(webfinger_object);
         } else {
             session->status(404);

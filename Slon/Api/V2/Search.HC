@@ -200,7 +200,7 @@ U0 @slon_api_v2_search_get(SlonHttpSession* session)
         }
 
     slon_api_v2_search_get_return:
-        @slon_http_send_json(session, results);
+        session->send(results);
         Json.Delete(results);
     } else {
         session->status(401);

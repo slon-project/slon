@@ -64,6 +64,7 @@ class SlonHttpSession {
     U8* actor_for_key_id;
 
     U8* (*header)(U8* key, U8* value = NULL);
+    U0 (*send)(U64 payload, I64 size = NULL);
     I64 (*status)(I64 code = NULL);
 };
 
@@ -209,7 +210,7 @@ U0 @slon_http_send_file(SlonHttpSession* session, U8* path)
         return;
     I64 size = 0;
     U8* data = FileRead(path, &size);
-    @slon_http_send(session, data, size);
+    session->send(data, size);
     Free(data);
 }
 
@@ -277,4 +278,21 @@ U8* @slon_session_header_wrapper_function(U8* key, U8* value = NULL)
     }
     @slon_http_set_header(session, key, value);
     return value;
+}
+
+U0 @slon_session_send_wrapper_function(U64 payload, I64 size = NULL)
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    if (!payload) {
+        return;
+    }
+    if (*payload(U32*) == JSON_SIG) {
+        @slon_http_send_json(session, payload);
+        return;
+    }
+    if (!size) {
+        @slon_http_send_string(session, payload);
+    } else {
+        @slon_http_send(session, payload, size);
+    }
 }

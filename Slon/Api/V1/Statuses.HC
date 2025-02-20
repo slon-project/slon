@@ -8,7 +8,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
 
         JsonArray* statuses = db->o("statuses")->a(account_id);
         if (!statuses || !statuses->length) {
-            @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+            session->send(SLON_EMPTY_JSON_OBJECT);
             return;
         }
 
@@ -43,7 +43,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
     slon_api_v1_statuses_delete_return:
         Free(path_segments);
         @slon_free(session, path);
-        @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+        session->send(SLON_EMPTY_JSON_OBJECT);
     } else {
         session->status(401);
     }
@@ -130,7 +130,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
             }
         }
 
-        @slon_http_send_json(session, status);
+        session->send(status);
 
         Json.Delete(status_app);
         Json.Delete(account_object);

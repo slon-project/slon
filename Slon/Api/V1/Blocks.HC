@@ -5,7 +5,7 @@ U0 @slon_api_v1_blocks_get(SlonHttpSession* session)
     if (@slon_api_authorized(session)) {
         // SLON_AUTH_ACCOUNT_ID
         // FIXME: Implement this
-        @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+        session->send(SLON_EMPTY_JSON_ARRAY);
     } else {
         session->status(401);
     }

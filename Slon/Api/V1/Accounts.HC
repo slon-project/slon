@@ -157,7 +157,7 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                 relationship->set("requested", FALSE, JSON_BOOLEAN);
                 relationship->set("domain_blocking", FALSE, JSON_BOOLEAN);
                 relationship->set("endorsed", FALSE, JSON_BOOLEAN);
-                @slon_http_send_json(session, relationship);
+                session->send(relationship);
                 goto slon_api_v1_accounts_post_return;
             }
             session->status(404);
@@ -229,7 +229,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                 }
             }
 
-            @slon_http_send_json(session, relationships);
+            session->send(relationships);
             Json.Delete(relationships);
             goto slon_api_v1_accounts_get_return;
         } else {
@@ -240,7 +240,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             SLON_AUTH_ACCOUNT_ID
             acct = @slon_api_account_by_id(account_id);
             if (acct) {
-                @slon_http_send_json(session, acct);
+                session->send(acct);
             } else {
                 session->status(404);
             }
@@ -259,7 +259,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             U8* method = path_segments[4];
             if (!StrICmp("following", method)) {
                 // FIXME: Implement this
-                @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+                session->send(SLON_EMPTY_JSON_ARRAY);
                 goto slon_api_v1_accounts_get_return;
             }
             if (!StrICmp("statuses", method)) {
@@ -329,7 +329,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                     }
                 }
 
-                @slon_http_send_json(session, statuses);
+                session->send(statuses);
 
                 Json.Delete(statuses);
                 goto slon_api_v1_accounts_get_return;
@@ -339,7 +339,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             // Return the Account profile
             JsonObject* profile_object = Json.Clone(acct);
             profile_object->unset("source");
-            @slon_http_send_json(session, profile_object);
+            session->send(profile_object);
             Json.Delete(profile_object);
         }
     }
@@ -487,7 +487,7 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
 
             @slon_db_save_accounts_to_disk;
             @slon_db_actors_update_user(acct);
-            @slon_http_send_json(session, acct);
+            session->send(acct);
         } else {
             session->status(401);
         }

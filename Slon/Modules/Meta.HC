@@ -5,5 +5,5 @@ U0 @slon_host_meta(SlonHttpSession* session)
 
     StrPrint(scratch_buffer, "<?xml version=\"1.0\" encoding=\"UTF-8\"?><XRD xmlns=\"http://docs.oasis-open.org/ns/xri/xrd-1.0\"><Link rel=\"lrdd\" template=\"https://%s/.well-known/webfinger?resource={uri}\"/></XRD>", db->o("instance")->@("uri"));
     @slon_http_set_content_type(session, "application/xrd+xml; charset=utf-8");
-    @slon_http_send_string(session, scratch_buffer);
+    session->send(scratch_buffer);
 }

@@ -6,7 +6,7 @@ U0 @slon_api_v1_timelines_home(SlonHttpSession* session, U8* account_id)
     // Return the Account's Home timeline
     JsonArray* status_array = db->o("timelines")->o("home")->a(account_id);
     if (!status_array) {
-        @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+        session->send(SLON_EMPTY_JSON_ARRAY);
         return;
     }
 
@@ -74,7 +74,7 @@ U0 @slon_api_v1_timelines_home(SlonHttpSession* session, U8* account_id)
         }
     }
 
-    @slon_http_send_json(session, statuses);
+    session->send(statuses);
 
     Json.Delete(statuses);
 }
@@ -94,13 +94,13 @@ U0 @slon_api_v1_timelines_get(SlonHttpSession* session)
 
         if (!StrICmp("public", path_segments[3])) {
             // FIXME: Implement this
-            @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+            session->send(SLON_EMPTY_JSON_ARRAY);
             goto slon_api_v1_timelines_get_return;
         }
 
         if (!StrICmp("tag", path_segments[3])) {
             // FIXME: Implement this
-            @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+            session->send(SLON_EMPTY_JSON_ARRAY);
             goto slon_api_v1_timelines_get_return;
         }
 
@@ -112,13 +112,13 @@ U0 @slon_api_v1_timelines_get(SlonHttpSession* session)
 
         if (!StrICmp("link", path_segments[3])) {
             // FIXME: Implement this
-            @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+            session->send(SLON_EMPTY_JSON_ARRAY);
             goto slon_api_v1_timelines_get_return;
         }
 
         if (!StrICmp("list", path_segments[3])) {
             // FIXME: Implement this
-            @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
+            session->send(SLON_EMPTY_JSON_ARRAY);
             goto slon_api_v1_timelines_get_return;
         }
 

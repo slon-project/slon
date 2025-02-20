@@ -102,6 +102,27 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     a += 0x31;
     @patch_call_rel32(a, &@slon_http_set_header);
 
+    // Create a copy of function and patch send
+    code_size = MSize(&@slon_session_send_wrapper_function);
+    session->send = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->send, &@slon_session_send_wrapper_function, code_size);
+
+    a = session->send;
+    a += 0x16;
+    MemSetI64(a, session, 1);
+
+    a = session->send;
+    a += 0x33;
+    @patch_call_rel32(a, &@slon_http_send_json);
+
+    a = session->send;
+    a += 0x41;
+    @patch_call_rel32(a, &@slon_http_send_string);
+
+    a = session->send;
+    a += 0x4c;
+    @patch_call_rel32(a, &@slon_http_send);
+
     return session;
 }
 
@@ -409,7 +430,7 @@ U0 @slon_http_handle_delete_request(SlonHttpSession* session)
     /* clang-format on */
 
     // FIXME: Implement this
-    @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
+    session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
 U0 @slon_http_handle_get_request(SlonHttpSession* session)
