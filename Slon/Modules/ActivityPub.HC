@@ -13,19 +13,19 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
     no_warn scratch_buffer;
 
     // 1. Check that we have a signature and digest
-    if (!StrLen(@slon_http_request_header(session, "signature")) || !StrLen(@slon_http_request_header(session, "digest"))) {
+    if (!StrLen(session->header("signature")) || !StrLen(session->header("digest"))) {
         AdamLog("[verify_signature] no signature or digest header present\n");
         return FALSE;
     }
 
     // 2. Check that digest 1) is SHA-256 and 2) matches content
-    U8* request_digest = @slon_http_request_header(session, "digest");
+    U8* request_digest = session->header("digest");
     if (!(String.BeginsWith("SHA-256", request_digest) || String.BeginsWith("sha-256", request_digest))) {
         AdamLog("[verify_signature] digest is not SHA-256\n");
         return FALSE;
     }
     request_digest = StrFind("=", request_digest) + 1;
-    I64 content_length = Str2I64(@slon_http_request_header(session, "content-length"));
+    I64 content_length = Str2I64(session->header("content-length"));
     if (!content_length) {
         AdamLog("[verify_signature] content-length is 0\n");
         return FALSE;
@@ -44,7 +44,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
     }
 
     // Parse values from Signature header
-    U8* signature_header = @slon_http_request_header(session, "signature");
+    U8* signature_header = session->header("signature");
     I64 signature_fragment_count = 0;
     U8** signature_fragments = String.Split(signature_header, ',', &signature_fragment_count);
 
@@ -192,7 +192,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
     U8** headers_split = String.Split(headers, ' ', &headers_split_count);
     i = 0;
     while (i < headers_split_count) {
-        sig_string_alloc_length += StrLen(@slon_http_request_header(session, headers_split[i]));
+        sig_string_alloc_length += StrLen(session->header(headers_split[i]));
         ++i;
     }
     sig_string_alloc_length += StrLen(@slon_http_request_verb(session));
@@ -209,7 +209,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         if (!StrCmp("(request-target)", headers_split[i])) {
             String.Append(sig_string, "(request-target): %s %s", "post", @slon_http_request_path(session));
         } else {
-            String.Append(sig_string, "%s: %s", headers_split[i], @slon_http_request_header(session, headers_split[i]));
+            String.Append(sig_string, "%s: %s", headers_split[i], session->header(headers_split[i]));
         }
         ++i;
         if (i < headers_split_count) {

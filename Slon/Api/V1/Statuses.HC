@@ -57,7 +57,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         SLON_AUTH_ACCOUNT_ID
 
         Bool idempotency_key_already_seen = FALSE;
-        U8* idempotency_key = @slon_http_request_header(session, "idempotency-key");
+        U8* idempotency_key = session->header("idempotency-key");
         if (StrLen(idempotency_key) > 0 && db->o("idempotency_keys")->@(idempotency_key)) {
             idempotency_key_already_seen = TRUE;
         }

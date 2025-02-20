@@ -43,6 +43,7 @@ U0 @slon_http_free_session(SlonHttpSession* session)
     @slon_http_free_response(session, session->response);
     @slon_http_free_request(session, session->request);
     I64 bytes_used = session->bytes_used - MSize2(session);
+    Free(session->header);
     Free(session->status);
     Free(session);
     if (bytes_used) {
@@ -83,6 +84,23 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     a = session->status;
     a += 0x10;
     MemSetI64(a, session, 1);
+
+    // Create a copy of function and patch header
+    code_size = MSize(&@slon_session_header_wrapper_function);
+    session->header = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->header, &@slon_session_header_wrapper_function, code_size);
+
+    a = session->header;
+    a += 0x16;
+    MemSetI64(a, session, 1);
+
+    a = session->header;
+    a += 0x26;
+    @patch_call_rel32(a, &@slon_http_request_header);
+
+    a = session->header;
+    a += 0x31;
+    @patch_call_rel32(a, &@slon_http_set_header);
 
     return session;
 }
@@ -215,8 +233,8 @@ slon_http_parse_request_headers:
 
 U0 @slon_http_authorize(SlonHttpSession* session)
 {
-    if (StrLen(@slon_http_request_header(session, "authorization"))) {
-        U8* access_token = StrFind(" ", @slon_http_request_header(session, "authorization")) + 1;
+    if (StrLen(session->header("authorization"))) {
+        U8* access_token = StrFind(" ", session->header("authorization")) + 1;
         session->auth = db->o("oauth")->o("tokens")->@(access_token);
     }
 }
@@ -283,7 +301,7 @@ U8* @slon_http_json_string_from_multipart_form_data(SlonHttpSession* session, U8
     String.Append(json_string, "{");
     U8* multipart_form_data_copy = @slon_strnew(session, multipart_form_data);
 
-    U8* boundary = StrFind("boundary=", @slon_http_request_header(session, "content-type")) + 9;
+    U8* boundary = StrFind("boundary=", session->header("content-type")) + 9;
     // Strip begin double-quotes and ending CRLF, double-quotes
     while (boundary[0] == '"')
         boundary++;
@@ -430,13 +448,13 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
 
 U0 @slon_http_handle_patch_request(SlonHttpSession* session)
 {
-    if (StrFind("json", @slon_http_request_header(session, "content-type")) > 0) {
+    if (StrFind("json", session->header("content-type")) > 0) {
         @slon_http_parse_request_as_json(session);
     }
-    if (String.BeginsWith("application/x-www-form-urlencoded", @slon_http_request_header(session, "content-type"))) {
+    if (String.BeginsWith("application/x-www-form-urlencoded", session->header("content-type"))) {
         @slon_http_parse_request_as_form_urlencoded(session);
     }
-    if (String.BeginsWith("multipart/form-data", @slon_http_request_header(session, "content-type"))) {
+    if (String.BeginsWith("multipart/form-data", session->header("content-type"))) {
         @slon_http_parse_request_as_multipart_form_data(session);
     }
 
@@ -453,17 +471,17 @@ U0 @slon_http_handle_patch_request(SlonHttpSession* session)
 
 U0 @slon_http_handle_post_request(SlonHttpSession* session)
 {
-    if (StrFind("json", @slon_http_request_header(session, "content-type")) > 0) {
+    if (StrFind("json", session->header("content-type")) > 0) {
         @slon_http_parse_request_as_json(session);
     }
-    if (String.BeginsWith("application/x-www-form-urlencoded", @slon_http_request_header(session, "content-type"))) {
+    if (String.BeginsWith("application/x-www-form-urlencoded", session->header("content-type"))) {
         @slon_http_parse_request_as_form_urlencoded(session);
     }
-    if (String.BeginsWith("multipart/form-data", @slon_http_request_header(session, "content-type"))) {
+    if (String.BeginsWith("multipart/form-data", session->header("content-type"))) {
         @slon_http_parse_request_as_multipart_form_data(session);
     }
     // Workaround for IceCubesApp: https://github.com/Dimillian/IceCubesApp/issues/2235
-    if (!StrLen(@slon_http_request_header(session, "content-type")) && @slon_http_request_has_query_string(session)) {
+    if (!StrLen(session->header("content-type")) && @slon_http_request_has_query_string(session)) {
         @slon_http_parse_query_string(session);
     }
 
@@ -533,8 +551,8 @@ U0 @slon_http_task(TcpSocket* s)
     //@slon_http_debug_print_request(session, FALSE);
 
     // If we have a content-length header, consume until we receive all the data, then set request->data pointer and size
-    if (StrLen(@slon_http_request_header(session, "content-length"))) {
-        I64 content_length = Str2I64(@slon_http_request_header(session, "content-length"));
+    if (StrLen(session->header("content-length"))) {
+        I64 content_length = Str2I64(session->header("content-length"));
         while (session->request->buffer->data + session->request->buffer->size - session->request->data < content_length)
             @slon_http_receive(session);
     }

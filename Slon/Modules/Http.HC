@@ -63,6 +63,7 @@ class SlonHttpSession {
     JsonObject* auth;
     U8* actor_for_key_id;
 
+    U8* (*header)(U8* key, U8* value = NULL);
     I64 (*status)(I64 code = NULL);
 };
 
@@ -148,12 +149,16 @@ JsonObject* @slon_http_request_json(SlonHttpSession* session)
 
 U0 @slon_http_set_header(SlonHttpSession* session, U8* key, U8* value)
 {
-    Json.Set(session->response->headers, key, value, JSON_STRING);
+    if (!StrICmp(value, "")) {
+        Json.Unset(session->response->headers, key);
+    } else {
+        Json.Set(session->response->headers, key, value, JSON_STRING);
+    }
 }
 
 U0 @slon_http_set_content_type(SlonHttpSession* session, U8* value)
 {
-    @slon_http_set_header(session, "content-type", value);
+    session->header("content-type", value);
 }
 
 U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
@@ -262,4 +267,14 @@ I64 @slon_session_status_wrapper_function(I64 code)
         session->response->status_code = code;
     }
     return session->response->status_code;
+}
+
+U8* @slon_session_header_wrapper_function(U8* key, U8* value = NULL)
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    if (!value) {
+        return @slon_http_request_header(session, key);
+    }
+    @slon_http_set_header(session, key, value);
+    return value;
 }

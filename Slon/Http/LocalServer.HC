@@ -164,7 +164,7 @@ U0 @slon_local_server_get(SlonHttpSession* session)
         if (IsDir(scratch_buffer)) {
             session->status(301);
             StrPrint(scratch_buffer, "%s/", path);
-            @slon_http_set_header(session, "Location", scratch_buffer);
+            session->header("Location", scratch_buffer);
         } else {
             @slon_local_server_send_file(session, scratch_buffer);
         }
@@ -214,8 +214,8 @@ U0 @slon_local_http_task(TcpSocket* s)
     }
 
     // If we have a content-length header, consume until we receive all the data, then set request->data pointer and size
-    if (StrLen(@slon_http_request_header(session, "content-length"))) {
-        I64 content_length = Str2I64(@slon_http_request_header(session, "content-length"));
+    if (StrLen(session->header("content-length"))) {
+        I64 content_length = Str2I64(session->header("content-length"));
         while (session->request->buffer->data + session->request->buffer->size - session->request->data < content_length)
             @slon_http_receive(session);
     }

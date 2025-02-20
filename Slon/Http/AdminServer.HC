@@ -285,7 +285,7 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
     if (!db->@("setup")) {
         if (StrICmp("/", @slon_http_request_path(session))) {
             session->status(302);
-            @slon_http_set_header(session, "Location", "/");
+            session->header("Location", "/");
         } else {
             @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/setup_instance.html");
         }
@@ -335,7 +335,7 @@ U0 @slon_admin_setup_instance(SlonHttpSession* session)
 
 U0 @slon_admin_server_post(SlonHttpSession* session)
 {
-    if (StrFind("json", @slon_http_request_header(session, "content-type")) > 0) {
+    if (StrFind("json", session->header("content-type")) > 0) {
         @slon_http_parse_request_as_json(session);
     }
 
@@ -402,8 +402,8 @@ U0 @slon_admin_http_task(TcpSocket* s)
     }
 
     // If we have a content-length header, consume until we receive all the data, then set request->data pointer and size
-    if (StrLen(@slon_http_request_header(session, "content-length"))) {
-        I64 content_length = Str2I64(@slon_http_request_header(session, "content-length"));
+    if (StrLen(session->header("content-length"))) {
+        I64 content_length = Str2I64(session->header("content-length"));
         while (session->request->buffer->data + session->request->buffer->size - session->request->data < content_length)
             @slon_http_receive(session);
     }
