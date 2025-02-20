@@ -258,10 +258,10 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
         if (actor) {
             @slon_http_send_ap_json(session, actor);
         } else {
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
         }
     } else {
-        @slon_http_set_status_code(session, 400);
+        session->status(400);
     }
 slon_activitypub_users_get_return:
     @slon_free(session, path);
@@ -740,7 +740,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
     if (!StrICmp("follow", request_json->@("type"))) {
         if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
             return;
         }
         if (!db->o("followers")->@(user)) {
@@ -830,7 +830,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
         // otherwise, 401
         if (!should_accept) {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
             return;
         }
 
@@ -911,7 +911,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
     if (!StrICmp("like", request_json->@("type"))) {
         if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
             return;
         }
         U8* status_id = StrFind("/", StrFind("/statuses/", request_json->@("object")) + 1) + 1;
@@ -934,7 +934,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
         Spawn(&@slon_activitypub_async_accept_request, o, "SlonAsyncAcceptTask");
     }
 
-    @slon_http_set_status_code(session, 200);
+    session->status(200);
     return;
 }
 
@@ -948,40 +948,40 @@ U0 @slon_activitypub_users_post(SlonHttpSession* session)
     U8** path_segments = String.Split(path, '/', &path_segments_count);
 
     if (path_segments_count < 3) {
-        @slon_http_set_status_code(session, 400);
+        session->status(400);
         goto slon_activitypub_users_post_return;
     }
 
     U8* user = path_segments[1];
     JsonObject* actor = db->o("actors")->@(user);
     if (!actor) {
-        @slon_http_set_status_code(session, 404);
+        session->status(404);
         goto slon_activitypub_users_post_return;
     }
 
     U8* method = path_segments[2];
     if (!StrICmp("inbox", method)) {
         if (!request_json) {
-            @slon_http_set_status_code(session, 400);
+            session->status(400);
             goto slon_activitypub_users_post_return;
         }
         if (!request_json->@("type")) {
-            @slon_http_set_status_code(session, 400);
+            session->status(400);
             goto slon_activitypub_users_post_return;
         }
         if (!StrICmp("delete", request_json->@("type"))) {
-            @slon_http_set_status_code(session, 400);
+            session->status(400);
             goto slon_activitypub_users_post_return;
         }
         if (!@slon_activitypub_http_signature_is_valid(session)) {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
             goto slon_activitypub_users_post_return;
         }
         @slon_activitypub_users_inbox(session, user);
         goto slon_activitypub_users_post_return;
     }
 
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
 
 slon_activitypub_users_post_return:
     if (session->actor_for_key_id) {

@@ -113,7 +113,7 @@ U0 @slon_local_server_directory_listing(SlonHttpSession* session, U8* path)
 
 U0 @slon_local_server_not_found(SlonHttpSession* session)
 {
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
     @slon_http_set_content_type(session, "text/html");
     @slon_http_send(session, "<h2>404 Not Found</h2>", 22);
 }
@@ -162,7 +162,7 @@ U0 @slon_local_server_get(SlonHttpSession* session)
         return;
     } else {
         if (IsDir(scratch_buffer)) {
-            @slon_http_set_status_code(session, 301);
+            session->status(301);
             StrPrint(scratch_buffer, "%s/", path);
             @slon_http_set_header(session, "Location", scratch_buffer);
         } else {
@@ -172,7 +172,7 @@ U0 @slon_local_server_get(SlonHttpSession* session)
     }
 
     // shouldn't get here :^)
-    @slon_http_set_status_code(session, 400);
+    session->status(400);
 }
 
 U0 @slon_local_http_handle_get_request(SlonHttpSession* session)
@@ -187,7 +187,7 @@ U0 @slon_local_http_handle_request(SlonHttpSession* session)
         @slon_local_http_handle_get_request(session);
         break;
     default:
-        @slon_http_set_status_code(session, 405);
+        session->status(405);
     }
 }
 
@@ -206,7 +206,7 @@ U0 @slon_local_http_task(TcpSocket* s)
 
         // Handle malformed requests (anything less than "GET / HTTP/1.0\r\n\r\n" is probably a bad request)
         if (session->request->buffer->size < 18) {
-            @slon_http_set_status_code(session, 400);
+            session->status(400);
             goto slon_local_http_task_send_response;
         }
 

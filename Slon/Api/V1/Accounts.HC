@@ -95,7 +95,7 @@ U0 @slon_api_v1_accounts_follow_request(U8* this_actor, U8* remote_actor)
 U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
 {
     if (!@slon_api_authorized(session)) {
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
         return;
     }
 
@@ -115,14 +115,14 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
         U8* some_account_id = path_segments[3];
         JsonObject* acct = @slon_api_account_by_id(some_account_id);
         if (!acct) {
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
             goto slon_api_v1_accounts_post_return;
         }
         if (path_segments_count > 5) {
             U8* method = path_segments[4];
             if (!StrICmp("follow", method)) {
                 if (!acct->@("remote_actor")) {
-                    @slon_http_set_status_code(session, 404);
+                    session->status(404);
                     goto slon_api_v1_accounts_post_return;
                 }
                 // add to my following
@@ -160,9 +160,9 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                 @slon_http_send_json(session, relationship);
                 goto slon_api_v1_accounts_post_return;
             }
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
         } else {
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
         }
     }
 slon_api_v1_accounts_post_return:
@@ -233,7 +233,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             Json.Delete(relationships);
             goto slon_api_v1_accounts_get_return;
         } else {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
         }
     } else if (!StrICmp("verify_credentials", path_segments[3])) {
         if (@slon_api_authorized(session)) {
@@ -242,17 +242,17 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             if (acct) {
                 @slon_http_send_json(session, acct);
             } else {
-                @slon_http_set_status_code(session, 404);
+                session->status(404);
             }
         } else {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
         }
     } else {
         // Work with account :id
         U8* some_account_id = path_segments[3];
         acct = @slon_api_account_by_id(some_account_id);
         if (!acct) {
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
             goto slon_api_v1_accounts_get_return;
         }
         if (path_segments_count > 5) {
@@ -334,7 +334,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                 Json.Delete(statuses);
                 goto slon_api_v1_accounts_get_return;
             }
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
         } else {
             // Return the Account profile
             JsonObject* profile_object = Json.Clone(acct);
@@ -367,14 +367,14 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
             SLON_AUTH_ACCOUNT_ID
 
             if (!request_json || !request_json->keys) {
-                @slon_http_set_status_code(session, 400);
+                session->status(400);
                 goto slon_api_v1_accounts_patch_return;
             }
 
             // FIXME: Support avatars/banners
             acct = @slon_api_account_by_id(account_id);
             if (!acct) {
-                @slon_http_set_status_code(session, 404);
+                session->status(404);
                 goto slon_api_v1_accounts_patch_return;
             }
             JsonObject* source = acct->@("source");
@@ -489,10 +489,10 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
             @slon_db_actors_update_user(acct);
             @slon_http_send_json(session, acct);
         } else {
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
         }
     } else {
-        @slon_http_set_status_code(session, 404);
+        session->status(404);
     }
 slon_api_v1_accounts_patch_return:
     @slon_free(session, path);

@@ -11,6 +11,6 @@ U0 @slon_api_v1_notifications_get(SlonHttpSession* session)
             @slon_http_send_json(session, SLON_EMPTY_JSON_ARRAY);
         }
     } else {
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
     }
 }

@@ -122,9 +122,9 @@ U0 @slon_api_v1_timelines_get(SlonHttpSession* session)
             goto slon_api_v1_timelines_get_return;
         }
 
-        @slon_http_set_status_code(session, 404);
+        session->status(404);
     } else {
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
         return;
     }
 slon_api_v1_timelines_get_return:

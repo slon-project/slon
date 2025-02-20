@@ -61,6 +61,9 @@ class SlonHttpSession {
     SlonHttpResponse* response;
     I64 bytes_used;
     JsonObject* auth;
+    U8* actor_for_key_id;
+
+    I64 (*status)(I64 code = NULL);
 };
 
 U64 @slon_calloc(SlonHttpSession* session, I64 size)
@@ -161,7 +164,7 @@ U0 @slon_http_set_status_code(SlonHttpSession* session, I64 status_code)
 U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
 {
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
-    @slon_http_set_status_code(session, 200);
+    session->status(200);
     @slon_http_set_content_type(session, "application/activity+json; charset=utf-8");
     U8* json_string = Json.Stringify(json);
     session->response->data = @slon_strnew(session, json_string);
@@ -172,7 +175,7 @@ U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
 U0 @slon_http_send_json(SlonHttpSession* session, U64 json)
 {
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
-    @slon_http_set_status_code(session, 200);
+    session->status(200);
     @slon_http_set_content_type(session, "application/json; charset=utf-8");
     U8* json_string = Json.Stringify(json);
     session->response->data = @slon_strnew(session, json_string);
@@ -183,7 +186,7 @@ U0 @slon_http_send_json(SlonHttpSession* session, U64 json)
 U0 @slon_http_send_string(SlonHttpSession* session, U8* str)
 {
     // a strnew of "str" is sent, sender cleans up "str"
-    @slon_http_set_status_code(session, 200);
+    session->status(200);
     session->response->data = @slon_strnew(session, str);
     session->response->size = StrLen(str);
 }
@@ -191,7 +194,7 @@ U0 @slon_http_send_string(SlonHttpSession* session, U8* str)
 U0 @slon_http_send(SlonHttpSession* session, U64 data, I64 size)
 {
     // a malloc copy of "data" is sent, sender cleans up "data"
-    @slon_http_set_status_code(session, 200);
+    session->status(200);
     U8* data_new = @slon_malloc(session, size);
     MemCpy(data_new, data, size);
     session->response->data = data_new;
@@ -253,4 +256,15 @@ U8* @slon_http_request_header(SlonHttpSession* session, U8* key)
 Bool @slon_http_request_has_query_string(SlonHttpSession* session)
 {
     return StrFind("?", session->request->raw_path) > 0 && !String.EndsWith("?", session->request->raw_path);
+}
+
+#define SLON_WRAPPER_MAGIC_NUMBER 0xC0DECAFEC0DECAFE
+
+I64 @slon_session_status_wrapper_function(I64 code)
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    if (code) {
+        session->response->status_code = code;
+    }
+    return session->response->status_code;
 }

@@ -45,7 +45,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
         @slon_free(session, path);
         @slon_http_send_json(session, SLON_EMPTY_JSON_OBJECT);
     } else {
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
     }
 }
 
@@ -141,6 +141,6 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         @slon_free(session, id);
         @slon_free(session, created_at);
     } else {
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
     }
 }

@@ -203,6 +203,6 @@ U0 @slon_api_v2_search_get(SlonHttpSession* session)
         @slon_http_send_json(session, results);
         Json.Delete(results);
     } else {
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
     }
 }

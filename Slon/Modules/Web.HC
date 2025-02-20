@@ -11,7 +11,7 @@ U0 @slon_web_user_get(SlonHttpSession* session)
     if (path_segments_count == 1) {
         JsonObject* actor = db->o("actors")->@(user);
         if (!actor) {
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
             goto slon_web_user_get_return;
         }
         // gib profil pl0x
@@ -34,7 +34,7 @@ U0 @slon_web_user_get(SlonHttpSession* session)
         goto slon_web_user_get_return;
     } else {
         // do something here (statuses, followers, media, etc.)
-        @slon_http_set_status_code(session, 404);
+        session->status(404);
     }
 
 slon_web_user_get_return:

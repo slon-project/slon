@@ -43,6 +43,7 @@ U0 @slon_http_free_session(SlonHttpSession* session)
     @slon_http_free_response(session, session->response);
     @slon_http_free_request(session, session->request);
     I64 bytes_used = session->bytes_used - MSize2(session);
+    Free(session->status);
     Free(session);
     if (bytes_used) {
         AdamLog("*** Session leaked %d bytes of memory ***\n", bytes_used);
@@ -72,6 +73,17 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     session->s = s;
     session->request = @slon_http_init_request(session);
     session->response = @slon_http_init_response(session);
+
+    // Create a copy of function and patch status
+    U64 a;
+    I64 code_size = MSize(&@slon_session_status_wrapper_function);
+    session->status = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->status, &@slon_session_status_wrapper_function, code_size);
+
+    a = session->status;
+    a += 0x10;
+    MemSetI64(a, session, 1);
+
     return session;
 }
 
@@ -413,7 +425,7 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
 
     /* clang-format on */
 
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
 }
 
 U0 @slon_http_handle_patch_request(SlonHttpSession* session)
@@ -436,7 +448,7 @@ U0 @slon_http_handle_patch_request(SlonHttpSession* session)
 
     /* clang-format on */
 
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
 }
 
 U0 @slon_http_handle_post_request(SlonHttpSession* session)
@@ -467,7 +479,7 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
 
     /* clang-format on */
 
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
 }
 
 U0 @slon_http_handle_request(SlonHttpSession* session)
@@ -483,7 +495,7 @@ U0 @slon_http_handle_request(SlonHttpSession* session)
         @slon_http_handle_get_request(session);
         break;
     case SLON_HTTP_VERB_OPTIONS:
-        @slon_http_set_status_code(session, 200);
+        session->status(200);
         break;
     case SLON_HTTP_VERB_PATCH:
         @slon_http_handle_patch_request(session);
@@ -492,7 +504,7 @@ U0 @slon_http_handle_request(SlonHttpSession* session)
         @slon_http_handle_post_request(session);
         break;
     default:
-        @slon_http_set_status_code(session, 405);
+        session->status(405);
     }
 }
 
@@ -511,7 +523,7 @@ U0 @slon_http_task(TcpSocket* s)
 
         // Handle malformed requests (anything less than "GET / HTTP/1.0\r\n\r\n" is probably a bad request)
         if (session->request->buffer->size < 18) {
-            @slon_http_set_status_code(session, 400);
+            session->status(400);
             goto slon_http_task_send_response;
         }
 

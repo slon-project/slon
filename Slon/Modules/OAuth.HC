@@ -71,7 +71,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
     JsonObject* app_object = db->o("apps")->@(client_id);
     // If client_id or redirect_uri are empty, or if client app doesn't exist, Bad Request
     if (!StrLen(client_id) || !StrLen(redirect_uri) || !app_object) {
-        @slon_http_set_status_code(session, 400);
+        session->status(400);
         return;
     }
     U8* client_secret = app_object->@("client_secret");
@@ -140,11 +140,11 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
 
             } else {
                 // If the account does not exist, return Not Found
-                @slon_http_set_status_code(session, 404);
+                session->status(404);
             }
         } else {
             // Response doesn't contain an email, therefore user is Unauthorized.
-            @slon_http_set_status_code(session, 401);
+            session->status(401);
         }
         return;
     } else {
@@ -153,7 +153,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
             db->o("oauth")->o("requests")->set(client_id, request_json, JSON_OBJECT);
             @async_slon_oauth_fetch_token(client_id);
         }
-        @slon_http_set_status_code(session, 202);
+        session->status(202);
     }
     Json.Delete(app_object);
 }
@@ -170,7 +170,7 @@ U0 @slon_oauth_token_post(SlonHttpSession* session)
     JsonObject* code_object = db->o("oauth")->o("codes")->@(code);
     if (!StrLen(client_id) || !StrLen(client_secret) || !code_object) {
         // If client_id is empty, or client_secret is empty, or the code doesn't exist, it's a Bad Request.
-        @slon_http_set_status_code(session, 400);
+        session->status(400);
         return;
     }
 
@@ -181,11 +181,11 @@ U0 @slon_oauth_token_post(SlonHttpSession* session)
             @slon_http_send_json(session, token);
         } else {
             // If the token doesn't exist, Page Expired?
-            @slon_http_set_status_code(session, 419);
+            session->status(419);
         }
     } else {
         // If client_id and client_secret do not match, it's Unauthorized
-        @slon_http_set_status_code(session, 401);
+        session->status(401);
     }
 
     Json.Delete(code_object);

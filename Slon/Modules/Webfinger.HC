@@ -31,9 +31,9 @@ U0 @slon_webfinger(SlonHttpSession* session)
             @slon_http_send_json(session, webfinger_object);
             Json.Delete(webfinger_object);
         } else {
-            @slon_http_set_status_code(session, 404);
+            session->status(404);
         }
     } else {
-        @slon_http_set_status_code(session, 400);
+        session->status(400);
     }
 }

@@ -284,7 +284,7 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
 {
     if (!db->@("setup")) {
         if (StrICmp("/", @slon_http_request_path(session))) {
-            @slon_http_set_status_code(session, 302);
+            session->status(302);
             @slon_http_set_header(session, "Location", "/");
         } else {
             @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/setup_instance.html");
@@ -312,7 +312,7 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
         return;
     }
 
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
 }
 
 U0 @slon_admin_setup_instance(SlonHttpSession* session)
@@ -349,7 +349,7 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
         return;
     }
 
-    @slon_http_set_status_code(session, 404);
+    session->status(404);
 }
 
 U0 @slon_admin_http_handle_get_request(SlonHttpSession* session)
@@ -375,7 +375,7 @@ U0 @slon_admin_http_handle_request(SlonHttpSession* session)
         @slon_admin_http_handle_post_request(session);
         break;
     default:
-        @slon_http_set_status_code(session, 405);
+        session->status(405);
     }
 }
 
@@ -394,7 +394,7 @@ U0 @slon_admin_http_task(TcpSocket* s)
 
         // Handle malformed requests (anything less than "GET / HTTP/1.0\r\n\r\n" is probably a bad request)
         if (session->request->buffer->size < 18) {
-            @slon_http_set_status_code(session, 400);
+            session->status(400);
             goto slon_admin_http_task_send_response;
         }
 
