@@ -45,6 +45,7 @@ U0 @slon_http_free_session(SlonHttpSession* session)
     I64 bytes_used = session->bytes_used - MSize2(session);
     Free(session->header);
     Free(session->status);
+    Free(session->send);
     Free(session);
     if (bytes_used) {
         AdamLog("*** Session leaked %d bytes of memory ***\n", bytes_used);
