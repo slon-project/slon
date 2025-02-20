@@ -156,11 +156,6 @@ U0 @slon_http_set_content_type(SlonHttpSession* session, U8* value)
     @slon_http_set_header(session, "content-type", value);
 }
 
-U0 @slon_http_set_status_code(SlonHttpSession* session, I64 status_code)
-{
-    session->response->status_code = status_code;
-}
-
 U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
 {
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
