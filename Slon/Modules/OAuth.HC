@@ -7,7 +7,7 @@ U0 @slon_oauth_well_known(SlonHttpSession* session)
 
     StrPrint(scratch_buffer, "{\"issuer\":\"https://%s\",\"authorization_endpoint\":\"https://%s/oauth/authorize\",\"response_types_supported\":[\"code\"],\"app_registration_endpoint\":\"https://%s/api/v1/apps\"}",
         db->o("instance")->@("uri"), db->o("instance")->@("uri"), db->o("instance")->@("uri"));
-    @slon_http_set_content_type(session, "application/json; charset=utf-8");
+    session->content_type("application/json; charset=utf-8");
     session->send(scratch_buffer);
 }
 

@@ -47,6 +47,7 @@ U0 @slon_http_free_session(SlonHttpSession* session)
     @slon_http_free_response(session, session->response);
     @slon_http_free_request(session, session->request);
     I64 bytes_used = session->bytes_used - MSize2(session);
+    Free(session->content_type);
     Free(session->verb);
     Free(session->header);
     Free(session->status);
@@ -164,6 +165,15 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     a = session->path_count;
     a += 0x0b;
+    MemSetI64(a, session, 1);
+
+    // Create a copy of function and patch content_type
+    code_size = MSize(&@slon_session_content_type_wrapper_function);
+    session->content_type = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->content_type, &@slon_session_content_type_wrapper_function, code_size);
+
+    a = session->content_type;
+    a += 0x10;
     MemSetI64(a, session, 1);
 
     return session;

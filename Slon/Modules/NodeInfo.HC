@@ -4,7 +4,7 @@ U0 @slon_nodeinfo(SlonHttpSession* session)
     no_warn request_json;
 
     StrPrint(scratch_buffer, "{\"links\":[{\"rel\":\"http://nodeinfo.diaspora.software/ns/schema/2.0\",\"href\":\"https://%s/nodeinfo/2.0\"}]}", db->o("instance")->@("uri"));
-    @slon_http_set_content_type(session, "application/json; charset=utf-8");
+    session->content_type("application/json; charset=utf-8");
     session->send(scratch_buffer);
 }
 

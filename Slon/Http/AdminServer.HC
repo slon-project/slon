@@ -254,7 +254,7 @@ U0 @slon_admin_new_account(SlonHttpSession* session)
 
     if (db->o("actors")->@(request_json->@("username"))) {
         StrPrint(scratch_buffer, "{\"error\":\"account already exists\"}");
-        @slon_http_set_content_type(session, "application/json");
+        session->content_type("application/json");
         session->send(scratch_buffer, StrLen(scratch_buffer));
     } else {
         @slon_admin_create_account(session);
@@ -276,7 +276,7 @@ U0 @slon_admin_info_stats(SlonHttpSession* session)
     String.Append(scratch_buffer, "\"uptime\":\"%d\"", cnts.jiffies);
     String.Append(scratch_buffer, "}");
 
-    @slon_http_set_content_type(session, "application/json");
+    session->content_type("application/json");
     session->send(scratch_buffer, StrLen(scratch_buffer));
 }
 

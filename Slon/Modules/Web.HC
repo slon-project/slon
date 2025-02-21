@@ -25,7 +25,7 @@ U0 @slon_web_user_get(SlonHttpSession* session)
         String.Append(html_data, "<script>getStatuses(");
         String.Append(html_data, user_file_data);
         String.Append(html_data, ");</script>");
-        @slon_http_set_content_type(session, "text/html");
+        session->content_type("text/html");
         session->send(html_data, StrLen(html_data));
 
         Free(html_file_data);

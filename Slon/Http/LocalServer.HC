@@ -2,38 +2,38 @@ U0 @slon_local_server_set_mime_type(SlonHttpSession* session, U8* filepath)
 {
     // FIXME: Do this programmatically like the Jakt version, this is awful
     if (String.EndsWith(".html", filepath)) {
-        @slon_http_set_content_type(session, "text/html");
+        session->content_type("text/html");
         return;
     }
     if (String.EndsWith(".txt", filepath)) {
-        @slon_http_set_content_type(session, "text/plain");
+        session->content_type("text/plain");
         return;
     }
     if (String.EndsWith(".css", filepath)) {
-        @slon_http_set_content_type(session, "text/css");
+        session->content_type("text/css");
         return;
     }
     if (String.EndsWith(".js", filepath)) {
-        @slon_http_set_content_type(session, "text/javascript");
+        session->content_type("text/javascript");
         return;
     }
     if (String.EndsWith(".json", filepath)) {
-        @slon_http_set_content_type(session, "application/json");
+        session->content_type("application/json");
         return;
     }
     if (String.EndsWith(".gif", filepath)) {
-        @slon_http_set_content_type(session, "image/gif");
+        session->content_type("image/gif");
         return;
     }
     if (String.EndsWith(".png", filepath)) {
-        @slon_http_set_content_type(session, "image/png");
+        session->content_type("image/png");
         return;
     }
     if (String.EndsWith(".jpeg", filepath) || String.EndsWith(".jpg", filepath)) {
-        @slon_http_set_content_type(session, "image/jpeg");
+        session->content_type("image/jpeg");
         return;
     }
-    @slon_http_set_content_type(session, "application/octet-stream");
+    session->content_type("application/octet-stream");
 }
 
 U0 @slon_local_server_send_file(SlonHttpSession* session, U8* filepath)
@@ -106,7 +106,7 @@ U0 @slon_local_server_directory_listing(SlonHttpSession* session, U8* path)
     String.Append(html, "<address>Slon static file webserver for (TempleOS) Server</address>");
     String.Append(html, "</body></html>");
 
-    @slon_http_set_content_type(session, "text/html");
+    session->content_type("text/html");
     session->send(html, StrLen(html));
     @slon_free(session, html);
 }
@@ -114,7 +114,7 @@ U0 @slon_local_server_directory_listing(SlonHttpSession* session, U8* path)
 U0 @slon_local_server_not_found(SlonHttpSession* session)
 {
     session->status(404);
-    @slon_http_set_content_type(session, "text/html");
+    session->content_type("text/html");
     session->send("<h2>404 Not Found</h2>", 22);
 }
 

@@ -73,6 +73,7 @@ class SlonHttpSession {
     I64 (*path_count)();
     I64 (*status)(I64 code = NULL);
     I64 (*verb)(Bool return_str = FALSE);
+    U0 (*content_type)(U8* value);
 };
 
 U64 @slon_calloc(SlonHttpSession* session, I64 size)
@@ -173,7 +174,7 @@ U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
 {
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
     session->status(200);
-    @slon_http_set_content_type(session, "application/activity+json; charset=utf-8");
+    session->content_type("application/activity+json; charset=utf-8");
     U8* json_string = Json.Stringify(json);
     session->response->data = @slon_strnew(session, json_string);
     session->response->size = StrLen(session->response->data);
@@ -184,7 +185,7 @@ U0 @slon_http_send_json(SlonHttpSession* session, U64 json)
 {
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
     session->status(200);
-    @slon_http_set_content_type(session, "application/json; charset=utf-8");
+    session->content_type("application/json; charset=utf-8");
     U8* json_string = Json.Stringify(json);
     session->response->data = @slon_strnew(session, json_string);
     session->response->size = StrLen(session->response->data);
@@ -223,13 +224,13 @@ U0 @slon_http_send_file(SlonHttpSession* session, U8* path)
 
 U0 @slon_http_send_html_file(SlonHttpSession* session, U8* path)
 {
-    @slon_http_set_content_type(session, "text/html");
+    session->content_type("text/html");
     @slon_http_send_file(session, path);
 }
 
 U0 @slon_http_send_json_file(SlonHttpSession* session, U8* path, U8* content_type = "application/json; charset=utf-8")
 {
-    @slon_http_set_content_type(session, content_type);
+    session->content_type(content_type);
     @slon_http_send_file(session, path);
 }
 
@@ -344,4 +345,10 @@ I64 @slon_session_path_count_wrapper_function()
 {
     SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
     return session->request->path_segments_count;
+}
+
+U0 @slon_session_content_type_wrapper_function(U8* value)
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    session->header("content-type", value);
 }
