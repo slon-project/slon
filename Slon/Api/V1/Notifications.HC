@@ -5,7 +5,7 @@ U0 @slon_api_v1_notifications_get(SlonHttpSession* session)
     if (@slon_api_authorized(session)) {
         // SLON_AUTH_ACCOUNT_ID
         // FIXME: Implement this
-        if (String.EndsWith("policy", @slon_http_request_path(session))) {
+        if (String.EndsWith("policy", session->path())) {
             session->send(SLON_EMPTY_JSON_OBJECT);
         } else {
             session->send(SLON_EMPTY_JSON_ARRAY);

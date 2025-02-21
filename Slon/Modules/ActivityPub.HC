@@ -196,7 +196,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         ++i;
     }
     sig_string_alloc_length += StrLen(session->verb(1));
-    sig_string_alloc_length += StrLen(@slon_http_request_path(session));
+    sig_string_alloc_length += StrLen(session->path());
     sig_string_alloc_length *= 2;
 
     // Construct our signature string
@@ -207,7 +207,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
             headers_split[i][0] += 'a' - headers_split[i][0];
         }
         if (!StrCmp("(request-target)", headers_split[i])) {
-            String.Append(sig_string, "(request-target): %s %s", "post", @slon_http_request_path(session));
+            String.Append(sig_string, "(request-target): %s %s", "post", session->path());
         } else {
             String.Append(sig_string, "%s: %s", headers_split[i], session->header(headers_split[i]));
         }

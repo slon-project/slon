@@ -283,7 +283,7 @@ U0 @slon_admin_info_stats(SlonHttpSession* session)
 U0 @slon_admin_server_get(SlonHttpSession* session)
 {
     if (!db->@("setup")) {
-        if (StrICmp("/", @slon_http_request_path(session))) {
+        if (StrICmp("/", session->path())) {
             session->status(302);
             session->header("Location", "/");
         } else {
@@ -292,22 +292,22 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
         return;
     }
 
-    if (!StrICmp("/info/stats", @slon_http_request_path(session))) {
+    if (!StrICmp("/info/stats", session->path())) {
         @slon_admin_info_stats(session);
         return;
     }
 
-    if (!StrICmp("/delete/account", @slon_http_request_path(session))) {
+    if (!StrICmp("/delete/account", session->path())) {
         @slon_admin_delete_account(session);
         return;
     }
 
-    if (!StrICmp("/manage/accounts", @slon_http_request_path(session))) {
+    if (!StrICmp("/manage/accounts", session->path())) {
         @slon_admin_manage_accounts(session);
         return;
     }
 
-    if (!StrICmp("/", @slon_http_request_path(session))) {
+    if (!StrICmp("/", session->path())) {
         @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/main.html");
         return;
     }
@@ -339,12 +339,12 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
         @slon_http_parse_request_as_json(session);
     }
 
-    if (!StrICmp("/setup/instance", @slon_http_request_path(session))) {
+    if (!StrICmp("/setup/instance", session->path())) {
         @slon_admin_setup_instance(session);
         return;
     }
 
-    if (!StrICmp("/new/account", @slon_http_request_path(session))) {
+    if (!StrICmp("/new/account", session->path())) {
         @slon_admin_new_account(session);
         return;
     }

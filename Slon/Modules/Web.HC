@@ -4,7 +4,7 @@ U0 @slon_web_user_get(SlonHttpSession* session)
     no_warn scratch_buffer, request_json;
 
     I64 path_segments_count = 0;
-    U8** path_segments = String.Split(StrFind("@", @slon_http_request_path(session)) + 1, '/', &path_segments_count);
+    U8** path_segments = String.Split(StrFind("@", session->path()) + 1, '/', &path_segments_count);
 
     U8* user = path_segments[0];
 

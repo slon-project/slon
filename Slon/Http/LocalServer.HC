@@ -123,7 +123,7 @@ U0 @slon_local_server_get(SlonHttpSession* session)
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn request_json;
 
-    U8* path = @slon_http_request_path(session);
+    U8* path = session->path();
 
     if (!path || !StrLen(path) || StrFind(":", path) > 0) {
         @slon_local_server_not_found(session);

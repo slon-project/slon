@@ -1,4 +1,4 @@
-if (!StrICmp("/oauth/token", @slon_http_request_path(session))) {
+if (!StrICmp("/oauth/token", session->path())) {
     @slon_oauth_token_post(session);
     return;
 }
