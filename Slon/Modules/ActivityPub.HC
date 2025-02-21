@@ -250,11 +250,8 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
 
 U0 @slon_activitypub_users_get(SlonHttpSession* session)
 {
-    U8* path = @slon_strnew(session, @slon_http_request_path(session));
-    I64 path_segments_count = 0;
-    U8** path_segments = String.Split(path, '/', &path_segments_count);
-    if (path_segments_count == 3) {
-        JsonObject* actor = db->o("actors")->@(path_segments[1]);
+    if (session->path_count() == 3) {
+        JsonObject* actor = db->o("actors")->@(session->path(1));
         if (actor) {
             @slon_http_send_ap_json(session, actor);
         } else {
@@ -263,8 +260,6 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
     } else {
         session->status(400);
     }
-slon_activitypub_users_get_return:
-    @slon_free(session, path);
 }
 
 U0 @slon_activitypub_async_accept_request(JsonObject* o)
@@ -958,23 +953,19 @@ U0 @slon_activitypub_users_post(SlonHttpSession* session)
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn scratch_buffer;
 
-    U8* path = @slon_strnew(session, @slon_http_request_path(session));
-    I64 path_segments_count = 0;
-    U8** path_segments = String.Split(path, '/', &path_segments_count);
-
-    if (path_segments_count < 3) {
+    if (session->path_count() < 3) {
         session->status(400);
         goto slon_activitypub_users_post_return;
     }
 
-    U8* user = path_segments[1];
+    U8* user = session->path(1);
     JsonObject* actor = db->o("actors")->@(user);
     if (!actor) {
         session->status(404);
         goto slon_activitypub_users_post_return;
     }
 
-    U8* method = path_segments[2];
+    U8* method = session->path(2);
     if (!StrICmp("inbox", method)) {
         if (!request_json) {
             session->status(400);
@@ -1002,6 +993,4 @@ slon_activitypub_users_post_return:
     if (session->actor_for_key_id) {
         @slon_free(session, session->actor_for_key_id);
     }
-    Free(path_segments);
-    @slon_free(session, path);
 }

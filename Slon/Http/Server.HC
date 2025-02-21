@@ -32,6 +32,10 @@ U0 @slon_http_free_request(SlonHttpSession* session, SlonHttpRequest* request)
             @slon_free(session, session->request->raw_path);
         if (request->path)
             @slon_free(session, session->request->path);
+        if (request->path_segments_src) {
+            @slon_free(session, session->request->path_segments_src);
+            Free(session->request->path_segments);
+        }
         @slon_free(session, request);
     }
 }
@@ -47,6 +51,8 @@ U0 @slon_http_free_session(SlonHttpSession* session)
     Free(session->header);
     Free(session->status);
     Free(session->send);
+    Free(session->path_count);
+    Free(session->path);
     Free(session);
     if (bytes_used) {
         AdamLog("*** Session leaked %d bytes of memory ***\n", bytes_used);
@@ -137,6 +143,28 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     a = session->verb;
     a += 0x1b;
     @patch_call_rel32(a, &@slon_http_request_verb);
+
+    // Create a copy of function and patch path
+    code_size = MSize(&@slon_session_path_wrapper_function);
+    session->path = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->path, &@slon_session_path_wrapper_function, code_size);
+
+    a = session->path;
+    a += 0x10;
+    MemSetI64(a, session, 1);
+
+    a = session->path;
+    a += 0x1a;
+    @patch_call_rel32(a, &@slon_http_request_path);
+
+    // Create a copy of function and patch path_count
+    code_size = MSize(&@slon_session_path_count_wrapper_function);
+    session->path_count = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->path_count, &@slon_session_path_count_wrapper_function, code_size);
+
+    a = session->path_count;
+    a += 0x0b;
+    MemSetI64(a, session, 1);
 
     return session;
 }
@@ -241,11 +269,13 @@ slon_http_parse_request_headers:
 
     session->request->verb = @slon_strnew(session, request_first_line_segments[0]);
     session->request->raw_path = @slon_strnew(session, request_first_line_segments[1]);
+    session->request->path = @slon_strnew(session, session->request->raw_path);
     if (StrFind("?", session->request->raw_path)) {
-        session->request->path = @slon_strnew(session, session->request->raw_path);
         *(StrFind("?", session->request->path)) = NULL;
-    } else {
-        session->request->path = @slon_strnew(session, session->request->raw_path);
+    }
+    if (StrFind("/", session->request->path)) {
+        session->request->path_segments_src = @slon_strnew(session, session->request->path);
+        session->request->path_segments = String.Split(session->request->path_segments_src, '/', &session->request->path_segments_count);
     }
 
     U8* key;

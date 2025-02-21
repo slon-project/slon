@@ -12,15 +12,11 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
             return;
         }
 
-        U8* path = @slon_strnew(session, @slon_http_request_path(session));
-        I64 path_segments_count = 0;
-        U8** path_segments = String.Split(path, '/', &path_segments_count);
-
-        if (path_segments_count < 4) {
+        if (session->path_count() < 4) {
             goto slon_api_v1_statuses_delete_return;
         }
 
-        U8* id = path_segments[3];
+        U8* id = session->path(3);
         JsonObject* status;
         JsonObject* fedi_status;
 
@@ -41,8 +37,6 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
         }
 
     slon_api_v1_statuses_delete_return:
-        Free(path_segments);
-        @slon_free(session, path);
         session->send(SLON_EMPTY_JSON_OBJECT);
     } else {
         session->status(401);

@@ -84,50 +84,38 @@ U0 @slon_api_v1_timelines_get(SlonHttpSession* session)
     if (@slon_api_authorized(session)) {
         SLON_AUTH_ACCOUNT_ID
 
-        U8* path = @slon_strnew(session, @slon_http_request_path(session));
-        I64 path_segments_count = 0;
-        U8** path_segments = String.Split(path, '/', &path_segments_count);
-
-        if (path_segments_count < 4) {
-            goto slon_api_v1_timelines_get_return;
+        if (session->path_count() < 4) {
+            return;
         }
-
-        if (!StrICmp("public", path_segments[3])) {
+        U8* timeline = session->path(3);
+        if (!StrICmp("public", timeline)) {
             // FIXME: Implement this
             session->send(SLON_EMPTY_JSON_ARRAY);
-            goto slon_api_v1_timelines_get_return;
+            return;
         }
-
-        if (!StrICmp("tag", path_segments[3])) {
+        if (!StrICmp("tag", timeline)) {
             // FIXME: Implement this
             session->send(SLON_EMPTY_JSON_ARRAY);
-            goto slon_api_v1_timelines_get_return;
+            return;
         }
-
-        if (!StrICmp("home", path_segments[3])) {
+        if (!StrICmp("home", timeline)) {
             // FIXME: Implement this
             @slon_api_v1_timelines_home(session, account_id);
-            goto slon_api_v1_timelines_get_return;
+            return;
         }
-
-        if (!StrICmp("link", path_segments[3])) {
+        if (!StrICmp("link", timeline)) {
             // FIXME: Implement this
             session->send(SLON_EMPTY_JSON_ARRAY);
-            goto slon_api_v1_timelines_get_return;
+            return;
         }
-
-        if (!StrICmp("list", path_segments[3])) {
+        if (!StrICmp("list", timeline)) {
             // FIXME: Implement this
             session->send(SLON_EMPTY_JSON_ARRAY);
-            goto slon_api_v1_timelines_get_return;
+            return;
         }
-
         session->status(404);
     } else {
         session->status(401);
         return;
     }
-slon_api_v1_timelines_get_return:
-    Free(path_segments);
-    @slon_free(session, path);
 }

@@ -45,6 +45,9 @@ class SlonHttpRequest {
     U8* verb;
     U8* raw_path;
     U8* path;
+    I64 path_segments_count;
+    U8* path_segments_src;
+    U8** path_segments;
     Bool headers_have_been_parsed;
 };
 
@@ -66,6 +69,8 @@ class SlonHttpSession {
 
     U8* (*header)(U8* key, U8* value = NULL);
     U0 (*send)(U64 payload, I64 size = NULL);
+    U8* (*path)(I64 segment = NULL);
+    I64 (*path_count)();
     I64 (*status)(I64 code = NULL);
     I64 (*verb)(Bool return_str = FALSE);
 };
@@ -228,9 +233,16 @@ U0 @slon_http_send_json_file(SlonHttpSession* session, U8* path, U8* content_typ
     @slon_http_send_file(session, path);
 }
 
-U8* @slon_http_request_path(SlonHttpSession* session)
+U8* @slon_http_request_path(SlonHttpSession* session, I64 segment = NULL)
 {
-    return session->request->path;
+    if (segment) {
+        if (!session->request->path_segments_count || segment >= session->request->path_segments_count) {
+            return NULL;
+        }
+        return session->request->path_segments[segment];
+    } else {
+        return session->request->path;
+    }
 }
 
 I64 @slon_http_request_verb(SlonHttpSession* session, Bool return_str = FALSE)
@@ -320,4 +332,16 @@ I64 @slon_session_verb_wrapper_function(Bool return_str = FALSE)
 {
     SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
     return @slon_http_request_verb(session, return_str);
+}
+
+U8* @slon_session_path_wrapper_function(I64 segment = NULL)
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    return @slon_http_request_path(session, segment);
+}
+
+I64 @slon_session_path_count_wrapper_function()
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    return session->request->path_segments_count;
 }

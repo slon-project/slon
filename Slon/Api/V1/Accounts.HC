@@ -104,26 +104,22 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
 
     I64 i;
 
-    U8* path = @slon_strnew(session, @slon_http_request_path(session));
-    I64 path_segments_count = 0;
-    U8** path_segments = String.Split(path, '/', &path_segments_count);
-
     if (2 == 3) {
         // placeholder for other methods
     } else {
         // Work with account :id
-        U8* some_account_id = path_segments[3];
+        U8* some_account_id = session->path(3);
         JsonObject* acct = @slon_api_account_by_id(some_account_id);
         if (!acct) {
             session->status(404);
-            goto slon_api_v1_accounts_post_return;
+            return;
         }
-        if (path_segments_count > 5) {
-            U8* method = path_segments[4];
+        if (session->path_count() > 5) {
+            U8* method = session->path(4);
             if (!StrICmp("follow", method)) {
                 if (!acct->@("remote_actor")) {
                     session->status(404);
-                    goto slon_api_v1_accounts_post_return;
+                    return;
                 }
                 // add to my following
                 if (!db->o("following")->a(my_acct->@("username"))) {
@@ -158,15 +154,13 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                 relationship->set("domain_blocking", FALSE, JSON_BOOLEAN);
                 relationship->set("endorsed", FALSE, JSON_BOOLEAN);
                 session->send(relationship);
-                goto slon_api_v1_accounts_post_return;
+                return;
             }
             session->status(404);
         } else {
             session->status(404);
         }
     }
-slon_api_v1_accounts_post_return:
-    @slon_free(session, path);
 }
 
 U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
@@ -176,12 +170,8 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
 
     I64 i;
 
-    U8* path = @slon_strnew(session, @slon_http_request_path(session));
-    I64 path_segments_count = 0;
-    U8** path_segments = String.Split(path, '/', &path_segments_count);
-
     JsonObject* acct = NULL;
-    if (!StrICmp("relationships", path_segments[3])) {
+    if (!StrICmp("relationships", session->path(3))) {
         if (@slon_api_authorized(session)) {
             // FIXME: handle array of id[]=
 
@@ -231,11 +221,11 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
 
             session->send(relationships);
             Json.Delete(relationships);
-            goto slon_api_v1_accounts_get_return;
+            return;
         } else {
             session->status(401);
         }
-    } else if (!StrICmp("verify_credentials", path_segments[3])) {
+    } else if (!StrICmp("verify_credentials", session->path(3))) {
         if (@slon_api_authorized(session)) {
             SLON_AUTH_ACCOUNT_ID
             acct = @slon_api_account_by_id(account_id);
@@ -249,18 +239,18 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
         }
     } else {
         // Work with account :id
-        U8* some_account_id = path_segments[3];
+        U8* some_account_id = session->path(3);
         acct = @slon_api_account_by_id(some_account_id);
         if (!acct) {
             session->status(404);
-            goto slon_api_v1_accounts_get_return;
+            return;
         }
-        if (path_segments_count > 5) {
-            U8* method = path_segments[4];
+        if (session->path_count() > 5) {
+            U8* method = session->path(4);
             if (!StrICmp("following", method)) {
                 // FIXME: Implement this
                 session->send(SLON_EMPTY_JSON_ARRAY);
-                goto slon_api_v1_accounts_get_return;
+                return;
             }
             if (!StrICmp("statuses", method)) {
                 // Return the Account's Statuses
@@ -332,7 +322,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                 session->send(statuses);
 
                 Json.Delete(statuses);
-                goto slon_api_v1_accounts_get_return;
+                return;
             }
             session->status(404);
         } else {
@@ -343,8 +333,6 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             Json.Delete(profile_object);
         }
     }
-slon_api_v1_accounts_get_return:
-    @slon_free(session, path);
 }
 
 Bool @slon_api_v1_accounts_key_is_boolean(U8* name)
@@ -356,26 +344,22 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
 
-    U8* path = @slon_strnew(session, @slon_http_request_path(session));
-    I64 path_segments_count = 0;
-    U8** path_segments = String.Split(path, '/', &path_segments_count);
-
     JsonObject* acct = NULL;
 
-    if (!StrICmp("update_credentials", path_segments[3])) {
+    if (!StrICmp("update_credentials", session->path(3))) {
         if (@slon_api_authorized(session)) {
             SLON_AUTH_ACCOUNT_ID
 
             if (!request_json || !request_json->keys) {
                 session->status(400);
-                goto slon_api_v1_accounts_patch_return;
+                return;
             }
 
             // FIXME: Support avatars/banners
             acct = @slon_api_account_by_id(account_id);
             if (!acct) {
                 session->status(404);
-                goto slon_api_v1_accounts_patch_return;
+                return;
             }
             JsonObject* source = acct->@("source");
 
@@ -494,6 +478,4 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
     } else {
         session->status(404);
     }
-slon_api_v1_accounts_patch_return:
-    @slon_free(session, path);
 }
