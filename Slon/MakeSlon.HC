@@ -29,6 +29,7 @@ WinMax(Fs);
 
 #include "Modules/ActivityPub";
 #include "Modules/Meta";
+#include "Modules/NodeInfo";
 #include "Modules/OAuth";
 #include "Modules/Web";
 #include "Modules/Webfinger";
