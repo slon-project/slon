@@ -4,6 +4,7 @@
 #define SLON_HTTP_VERB_OPTIONS 3
 #define SLON_HTTP_VERB_PATCH 4
 #define SLON_HTTP_VERB_POST 5
+#define SLON_HTTP_VERB_PUT 6
 
 #define SLON_MULTIPART_PARSER_CONSUME_BOUNDARY 0
 #define SLON_MULTIPART_PARSER_CONSUME_CONTENT_DISPOSITION 1
@@ -66,6 +67,7 @@ class SlonHttpSession {
     U8* (*header)(U8* key, U8* value = NULL);
     U0 (*send)(U64 payload, I64 size = NULL);
     I64 (*status)(I64 code = NULL);
+    I64 (*verb)(Bool return_str = FALSE);
 };
 
 U64 @slon_calloc(SlonHttpSession* session, I64 size)
@@ -231,18 +233,35 @@ U8* @slon_http_request_path(SlonHttpSession* session)
     return session->request->path;
 }
 
-I64 @slon_http_request_verb(SlonHttpSession* session)
+I64 @slon_http_request_verb(SlonHttpSession* session, Bool return_str = FALSE)
 {
-    if (!StrCmp(session->request->verb, "DELETE"))
-        return SLON_HTTP_VERB_DELETE;
-    if (!StrCmp(session->request->verb, "GET"))
-        return SLON_HTTP_VERB_GET;
-    if (!StrCmp(session->request->verb, "OPTIONS"))
-        return SLON_HTTP_VERB_OPTIONS;
-    if (!StrCmp(session->request->verb, "PATCH"))
-        return SLON_HTTP_VERB_PATCH;
-    if (!StrCmp(session->request->verb, "POST"))
-        return SLON_HTTP_VERB_POST;
+    if (return_str) {
+        if (!StrCmp(session->request->verb, "DELETE"))
+            return "DELETE";
+        if (!StrCmp(session->request->verb, "GET"))
+            return "GET";
+        if (!StrCmp(session->request->verb, "OPTIONS"))
+            return "OPTIONS";
+        if (!StrCmp(session->request->verb, "PATCH"))
+            return "PATCH";
+        if (!StrCmp(session->request->verb, "POST"))
+            return "POST";
+        if (!StrCmp(session->request->verb, "PUT"))
+            return "PUT";
+    } else {
+        if (!StrCmp(session->request->verb, "DELETE"))
+            return SLON_HTTP_VERB_DELETE;
+        if (!StrCmp(session->request->verb, "GET"))
+            return SLON_HTTP_VERB_GET;
+        if (!StrCmp(session->request->verb, "OPTIONS"))
+            return SLON_HTTP_VERB_OPTIONS;
+        if (!StrCmp(session->request->verb, "PATCH"))
+            return SLON_HTTP_VERB_PATCH;
+        if (!StrCmp(session->request->verb, "POST"))
+            return SLON_HTTP_VERB_POST;
+        if (!StrCmp(session->request->verb, "PUT"))
+            return SLON_HTTP_VERB_PUT;
+    }
     return 999;
 }
 
@@ -295,4 +314,10 @@ U0 @slon_session_send_wrapper_function(U64 payload, I64 size = NULL)
     } else {
         @slon_http_send(session, payload, size);
     }
+}
+
+I64 @slon_session_verb_wrapper_function(Bool return_str = FALSE)
+{
+    SlonHttpSession* session = SLON_WRAPPER_MAGIC_NUMBER;
+    return @slon_http_request_verb(session, return_str);
 }

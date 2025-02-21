@@ -182,7 +182,7 @@ U0 @slon_local_http_handle_get_request(SlonHttpSession* session)
 
 U0 @slon_local_http_handle_request(SlonHttpSession* session)
 {
-    switch (@slon_http_request_verb(session)) {
+    switch (session->verb()) {
     case SLON_HTTP_VERB_GET:
         @slon_local_http_handle_get_request(session);
         break;

@@ -43,6 +43,7 @@ U0 @slon_http_free_session(SlonHttpSession* session)
     @slon_http_free_response(session, session->response);
     @slon_http_free_request(session, session->request);
     I64 bytes_used = session->bytes_used - MSize2(session);
+    Free(session->verb);
     Free(session->header);
     Free(session->status);
     Free(session->send);
@@ -123,6 +124,19 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     a = session->send;
     a += 0x4c;
     @patch_call_rel32(a, &@slon_http_send);
+
+    // Create a copy of function and patch verb
+    code_size = MSize(&@slon_session_verb_wrapper_function);
+    session->verb = CAlloc(code_size, adam_task->code_heap);
+    MemCpy(session->verb, &@slon_session_verb_wrapper_function, code_size);
+
+    a = session->verb;
+    a += 0x11;
+    MemSetI64(a, session, 1);
+
+    a = session->verb;
+    a += 0x1b;
+    @patch_call_rel32(a, &@slon_http_request_verb);
 
     return session;
 }
@@ -527,7 +541,7 @@ U0 @slon_http_handle_request(SlonHttpSession* session)
 
     //        .purge_expired_idempotency_keys()
     @slon_http_authorize(session);
-    switch (@slon_http_request_verb(session)) {
+    switch (session->verb()) {
     case SLON_HTTP_VERB_DELETE:
         @slon_http_handle_delete_request(session);
         break;

@@ -195,7 +195,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         sig_string_alloc_length += StrLen(session->header(headers_split[i]));
         ++i;
     }
-    sig_string_alloc_length += StrLen(@slon_http_request_verb(session));
+    sig_string_alloc_length += StrLen(session->verb(1));
     sig_string_alloc_length += StrLen(@slon_http_request_path(session));
     sig_string_alloc_length *= 2;
 
