@@ -126,6 +126,8 @@ U0 @slon_db_load_timelines_from_disk()
     }
     DirTreeDel(files);
     timelines->set("home", home_statuses, JSON_OBJECT);
+    StrPrint(scratch_buffer, "%s/timelines/public.json", SLON_DB_PATH);
+    timelines->set("public", Json.ParseFile(scratch_buffer), JSON_ARRAY);
 
     db->set("timelines", timelines, JSON_OBJECT);
 }
@@ -214,6 +216,8 @@ U0 @slon_db_save_timelines_to_disk()
         Json.DumpToFile(scratch_buffer, key->value);
         key = key->next;
     }
+    StrPrint(scratch_buffer, "%s/timelines/public.json", SLON_DB_PATH);
+    Json.DumpToFile(scratch_buffer, db->o("timelines")->a("public"));
 }
 
 U0 @slon_db_save_to_disk()
@@ -245,6 +249,7 @@ U0 @slon_db_load_from_defaults()
     db->set("statuses", Json.CreateObject(), JSON_OBJECT);
     db->set("timelines", Json.CreateObject(), JSON_OBJECT);
     db->o("timelines")->set("home", Json.CreateObject(), JSON_OBJECT);
+    db->o("timelines")->set("public", Json.CreateArray(), JSON_ARRAY);
     JsonObject* oauth = Json.CreateObject();
     oauth->set("codes", Json.CreateObject(), JSON_OBJECT);
     oauth->set("requests", Json.CreateObject(), JSON_OBJECT);

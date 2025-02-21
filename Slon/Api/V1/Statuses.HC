@@ -116,7 +116,9 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
 
         if (!idempotency_key_already_seen) {
             db->o("statuses")->a(account_id)->append(Json.CreateItem(status, JSON_OBJECT));
+            db->o("timelines")->a("public")->append(Json.CreateItem(status, JSON_OBJECT));
             @slon_db_save_statuses_to_disk;
+            @slon_db_save_timelines_to_disk;
             @slon_db_instance_increment_status_count;
             @slon_db_save_instance_to_disk;
             if (@slon_api_status_create_fedi) {
