@@ -370,7 +370,7 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
 
     switch (verb) {
     case SLON_HTTP_VERB_GET:
-        resp = Http.Get(url, fetch_buffer, http_headers);
+        resp = Http.Get(url, fetch_buffer, NULL, http_headers);
         break;
     case SLON_HTTP_VERB_POST:
         resp = Http.Post(url, fetch_buffer, request_object_s, http_headers);
