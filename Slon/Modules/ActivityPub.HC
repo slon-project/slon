@@ -580,6 +580,8 @@ U0 @slon_activitypub_delete_status_fedi(JsonObject* status)
 JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
     U8* remote_actor = request_json->@("actor");
     JsonObject* account = @slon_api_account_by_remote_actor(remote_actor);
 
@@ -616,47 +618,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     }
 
     JsonObject* actor_object = Json.Parse(resp->body.data);
-
-    U8* id = @slon_api_generate_unique_id(session);
-    U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
-
-    account->set("id", id, JSON_STRING);
-    account->set("created_at", created_at, JSON_STRING);
-    account->set("username", actor_object->@("preferredUsername"), JSON_STRING);
-    StrPrint(scratch_buffer, "%s@%s", actor_object->@("preferredUsername"), url->host);
-    account->set("acct", scratch_buffer, JSON_STRING);
-    account->set("display_name", actor_object->@("name"), JSON_STRING);
-    account->set("email", "", JSON_STRING);
-    account->set("note", actor_object->@("summary"), JSON_STRING);
-    if (actor_object->@("icon")) {
-        account->set("avatar", actor_object->o("icon")->@("url"), JSON_STRING);
-        account->set("avatar_static", actor_object->o("icon")->@("url"), JSON_STRING);
-    } else {
-        account->set("avatar", SLON_MISSING_ACCOUNT_AVATAR, JSON_STRING);
-        account->set("avatar_static", SLON_MISSING_ACCOUNT_AVATAR, JSON_STRING);
-    }
-    account->set("header", "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", JSON_STRING);
-    account->set("header_static", "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", JSON_STRING);
-    account->set("last_status_at", "0", JSON_STRING);
-    account->set("followers_count", 0, JSON_NUMBER);
-    account->set("following_count", 0, JSON_NUMBER);
-    account->set("statuses_count", 0, JSON_NUMBER);
-    account->set("locked", FALSE, JSON_BOOLEAN);
-    account->set("bot", FALSE, JSON_BOOLEAN);
-    account->set("discoverable", FALSE, JSON_BOOLEAN);
-    account->set("indexable", FALSE, JSON_BOOLEAN);
-    account->set("hide_collections", FALSE, JSON_BOOLEAN);
-    account->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
-    account->set("fields", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
-    account->set("url", remote_actor, JSON_STRING);
-    account->set("remote_actor", remote_actor, JSON_STRING);
-
-    db->a("accounts")->append(Json.CreateItem(account, JSON_OBJECT));
-    // db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
-    @slon_db_save_accounts_to_disk;
-
-    @slon_free(session, created_at);
-    @slon_free(session, id);
+    account = @slon_accounts_create_local_for_remote_actor(session, actor_object, remote_actor, url);
     Free(fetch_buffer);
 
     return account;
