@@ -321,9 +321,9 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
     }
     String.Append(scratch_buffer, "%s\n", url->path);
     String.Append(scratch_buffer, "host: %s\n", url->host);
-    String.Append(scratch_buffer, "date: %s\n", http_headers->@("Date"));
+    String.Append(scratch_buffer, "date: %s", http_headers->@("Date"));
     if (request_object) {
-        String.Append(scratch_buffer, "digest: %s\n", http_headers->@("Digest"));
+        String.Append(scratch_buffer, "\ndigest: %s\n", http_headers->@("Digest"));
         String.Append(scratch_buffer, "content-type: %s", http_headers->@("Content-Type"));
     }
 
