@@ -1,3 +1,19 @@
+Bool @slon_activitypub_status_exists(JsonArray* statuses, U8* uri)
+{
+    if (!statuses || !uri) {
+        return FALSE;
+    }
+    JsonObject* status = NULL;
+    I64 i;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!StrICmp(uri, status->@("uri"))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 U8* @slon_activitypub_strip_double_quotes(U8* str)
 {
     while (str[0] == '"')
@@ -723,6 +739,13 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
         if (!should_accept) {
             session->status(401);
             return;
+        }
+
+        if (db->o("timelines")->o("home")->a(account->@("id"))) {
+            if (@slon_activitypub_status_exists(db->o("timelines")->o("home")->a(account->@("id")), request_json->o("object")->@("atomUri"))) {
+                session->status(200);
+                return;
+            }
         }
 
         JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session);
