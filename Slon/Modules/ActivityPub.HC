@@ -7,7 +7,7 @@ U8* @slon_activitypub_strip_double_quotes(U8* str)
     return str;
 }
 
-Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
+Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* user)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn scratch_buffer;
@@ -93,26 +93,15 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         U8* signatory_url_string = @slon_strnew(session, keyId);
         StrFind("#", signatory_url_string)[0] = NULL;
 
-        HttpUrl* url = @http_parse_url(signatory_url_string);
-        @slon_free(session, signatory_url_string);
-        if (!url) {
-            @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, malformed url or unspecified error");
-            return FALSE;
-        }
-
         U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
-        JsonObject* http_headers = Json.CreateObject();
-        http_headers->set("accept", "application/json", JSON_STRING);
-        @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
+        U8* signatory = db->o("actors")->o(user)->@("id");
+        @http_response* resp = @slon_activitypub_signed_request(signatory_url_string, fetch_buffer, NULL, SLON_HTTP_VERB_GET, signatory);
+        @slon_free(session, signatory_url_string);
 
         if (!resp) {
             @slon_log(LOG_HTTPD, "Could not fetch signatory's public key, invalid response from remote server");
             Free(fetch_buffer);
             return FALSE;
-        }
-
-        while (resp->state != HTTP_STATE_DONE) {
-            Sleep(1);
         }
 
         if (!resp->body.length) {
@@ -182,7 +171,6 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session)
         @slon_free(session, pem_single_line);
 
         Json.Delete(user_object);
-        Json.Delete(http_headers);
     }
 
     // Calculate our signature string allocation
@@ -872,7 +860,7 @@ U0 @slon_activitypub_users_post(SlonHttpSession* session)
             session->status(400);
             goto slon_activitypub_users_post_return;
         }
-        if (!@slon_activitypub_http_signature_is_valid(session)) {
+        if (!@slon_activitypub_http_signature_is_valid(session, user)) {
             session->status(401);
             goto slon_activitypub_users_post_return;
         }
