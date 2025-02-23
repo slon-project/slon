@@ -653,7 +653,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
 
     db->a("accounts")->append(Json.CreateItem(account, JSON_OBJECT));
     // db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
-    @slon_db_save_to_disk;
+    @slon_db_save_accounts_to_disk;
 
     @slon_free(session, created_at);
     @slon_free(session, id);
@@ -695,7 +695,8 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
         if (!already_following) {
             followers->append(Json.CreateItem(request_json->@("actor"), JSON_STRING));
             account->set("followers_count", account->@("followers_count") + 1);
-            @slon_db_save_to_disk;
+            @slon_db_save_followers_to_disk;
+            @slon_db_save_accounts_to_disk;
         }
         request_object = Json.Clone(request_json);
     }

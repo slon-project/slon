@@ -51,7 +51,7 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                     db->o("following")->set(my_acct->@("username"), Json.CreateArray(), JSON_ARRAY);
                 }
                 db->o("following")->a(my_acct->@("username"))->append(Json.CreateItem(acct->@("remote_actor"), JSON_STRING));
-                @slon_db_save_to_disk;
+                @slon_db_save_following_to_disk;
                 // send Follow request
                 @slon_api_v1_accounts_follow_request(db->o("actors")->o((my_acct->@("username")))->@("id"), acct->@("remote_actor"));
 
