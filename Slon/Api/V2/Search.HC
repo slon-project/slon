@@ -3,6 +3,8 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn request_json;
 
+    SLON_AUTH_ACCOUNT_ID
+
     I64 i;
     Bool tld_is_valid = FALSE;
     for (i = 0; i < SLON_TLDS->length; i++) {
@@ -76,14 +78,9 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
     }
 
     // We have the remote actor uri, let's fetch and create a local account
-    url = @http_parse_url(remote_actor);
-    if (!url) {
-        @slon_log(LOG_HTTPD, "Could not fetch actor, malformed url or unspecified error");
-        return NULL;
-    }
-
     fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
-    resp = Http.Get(url, fetch_buffer, NULL, http_headers);
+    U8* signatory = db->o("actors")->o(@slon_api_account_by_id(account_id)->@("username"))->@("id");
+    resp = @slon_activitypub_signed_request(remote_actor, fetch_buffer, NULL, SLON_HTTP_VERB_GET, signatory);
 
     if (!resp) {
         @slon_log(LOG_HTTPD, "Could not fetch actor, invalid response from remote server");
@@ -91,17 +88,11 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
         return NULL;
     }
 
-    while (resp->state != HTTP_STATE_DONE) {
-        Sleep(1);
-    }
-
     if (!resp->body.length) {
         @slon_log(LOG_HTTPD, "Could not fetch actor, empty response from remote server");
         Free(fetch_buffer);
         return NULL;
     }
-
-    Free(fetch_buffer);
 
     JsonObject* actor_object = Json.Parse(resp->body.data);
 
@@ -147,6 +138,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
 
     @slon_free(session, created_at);
     @slon_free(session, id);
+    Free(fetch_buffer);
 
     return account;
 }

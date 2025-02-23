@@ -262,37 +262,44 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
     }
 }
 
-U0 @slon_activitypub_async_accept_request(JsonObject* o)
+@http_response* @slon_activitypub_signed_request(U8* url_string, U8* fetch_buffer, JsonObject* request_object = NULL, I64 verb = SLON_HTTP_VERB_POST, U8* signatory = NULL)
 {
-    JsonObject* request = o->o("request");
-    if (!StrICmp("accept", request->@("type")) || !StrICmp("reject", request->@("type"))) {
-        return;
+    switch (verb) {
+    case SLON_HTTP_VERB_GET:
+        break;
+    case SLON_HTTP_VERB_POST:
+        break;
+    default:
+        @slon_log(LOG_HTTPD, "Could not send ActivityPub request, unsupported HTTP verb");
+        return NULL;
     }
 
-    Sleep(2000);
-
-    U8 scratch_buffer[2048];
-
-    U8* this_actor = db->o("actors")->o(o->@("user"))->@("id");
-
-    StrPrint(scratch_buffer, "%s/accept/%d", this_actor, Now);
-    JsonObject* accept_object = Json.CreateObject();
-    accept_object->set("@context", request->@("@context"), JSON_STRING);
-    accept_object->set("id", scratch_buffer, JSON_STRING);
-    accept_object->set("type", "Accept", JSON_STRING);
-    accept_object->set("actor", this_actor, JSON_STRING);
-    accept_object->set("object", request, JSON_OBJECT);
-
-    U8* accept_object_s = Json.Stringify(accept_object);
-
-    U8 content_hash[512];
-    calc_sha_256(content_hash, accept_object_s, StrLen(accept_object_s));
-    U8* computed_digest = @base64_encode(content_hash, 32);
+    if (!url_string || !fetch_buffer) {
+        return NULL;
+    }
+    HttpUrl* url = @http_parse_url(url_string);
+    if (!url) {
+        return NULL;
+    }
 
     JsonObject* http_headers = Json.CreateObject();
 
-    StrPrint(scratch_buffer, "%s/inbox", request->@("actor"));
-    HttpUrl* url = @http_parse_url(scratch_buffer);
+    U8 scratch_buffer[2048];
+    U8* request_object_s = NULL;
+
+    if (request_object) {
+        signatory = request_object->@("actor");
+        request_object_s = Json.Stringify(request_object);
+        U8 content_hash[32];
+        calc_sha_256(content_hash, request_object_s, StrLen(request_object_s));
+        U8* computed_digest = @base64_encode(content_hash, 32);
+        StrPrint(scratch_buffer, "SHA-256=%s", computed_digest);
+        http_headers->set("Digest", scratch_buffer, JSON_STRING);
+        http_headers->set("Content-Type", "application/activity+json", JSON_STRING);
+        Free(computed_digest);
+    }
+
+    http_headers->set("Accept", "application/activity+json", JSON_STRING);
 
     CDateStruct ds;
     Date2Struct(&ds, Now + 1043910000);
@@ -300,23 +307,31 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
         ds.year, ds.hour, ds.min, ds.sec);
     http_headers->set("Date", scratch_buffer, JSON_STRING);
 
-    StrPrint(scratch_buffer, "SHA-256=%s", computed_digest);
-    http_headers->set("Digest", scratch_buffer, JSON_STRING);
-
-    http_headers->set("Content-Type", "application/activity+json", JSON_STRING);
-
     StrPrint(scratch_buffer, "");
-    String.Append(scratch_buffer, "(request-target): post %s\n", url->path);
+    String.Append(scratch_buffer, "(request-target): ");
+    switch (verb) {
+    case SLON_HTTP_VERB_GET:
+        String.Append(scratch_buffer, "get ");
+        break;
+    case SLON_HTTP_VERB_POST:
+        String.Append(scratch_buffer, "post ");
+        break;
+    default:
+        break;
+    }
+    String.Append(scratch_buffer, "%s\n", url->path);
     String.Append(scratch_buffer, "host: %s\n", url->host);
     String.Append(scratch_buffer, "date: %s\n", http_headers->@("Date"));
-    String.Append(scratch_buffer, "digest: %s\n", http_headers->@("Digest"));
-    String.Append(scratch_buffer, "content-type: %s", http_headers->@("Content-Type"));
+    if (request_object) {
+        String.Append(scratch_buffer, "digest: %s\n", http_headers->@("Digest"));
+        String.Append(scratch_buffer, "content-type: %s", http_headers->@("Content-Type"));
+    }
 
     AdamLog("headers_to_sign:\n```%s```\n", scratch_buffer);
-
     calc_sha_256(content_hash, scratch_buffer, StrLen(scratch_buffer));
 
-    U8* user = StrFind("/users/", this_actor) + 7;
+    U8* user = StrFind("/users/", signatory) + 7;
+
     JsonObject* private_key_binary = db->o("private_keys_binary")->o(user);
     if (!private_key_binary) {
         I64 private_key_binary_size = 0;
@@ -340,33 +355,80 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
     U8* computed_sig = @base64_encode(sig, 256);
 
     StrCpy(scratch_buffer, "");
-    String.Append(scratch_buffer, "keyId=\"%s#main-key\",", this_actor);
+    String.Append(scratch_buffer, "keyId=\"%s#main-key\",", signatory);
     String.Append(scratch_buffer, "algorithm=\"rsa-sha256\",");
-    String.Append(scratch_buffer, "headers=\"(request-target) host date digest content-type\",");
+    String.Append(scratch_buffer, "headers=\"(request-target) host date");
+    if (request_object) {
+        String.Append(scratch_buffer, " digest content-type");
+    }
+    String.Append(scratch_buffer, "\",");
     String.Append(scratch_buffer, "signature=\"%s\"", computed_sig);
     http_headers->set("Signature", scratch_buffer, JSON_STRING);
+    Free(computed_sig);
 
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
-    @http_response* resp = Http.Post(url, fetch_buffer, accept_object_s, http_headers);
+    @http_response* resp = NULL;
+
+    switch (verb) {
+    case SLON_HTTP_VERB_GET:
+        resp = Http.Get(url, fetch_buffer, http_headers);
+        break;
+    case SLON_HTTP_VERB_POST:
+        resp = Http.Post(url, fetch_buffer, request_object_s, http_headers);
+        break;
+    default:
+        break;
+    }
 
     if (!resp) {
-        @slon_log(LOG_HTTPD, "Could not POST Accept, invalid response from remote server");
+        @slon_log(LOG_HTTPD, "Could not send ActivityPub request, invalid response from remote server");
         Free(fetch_buffer);
-        return;
+        return NULL;
     }
 
     while (resp->state != HTTP_STATE_DONE) {
         Sleep(1);
     }
 
+    if (request_object_s) {
+        Free(request_object_s);
+    }
+
     AdamLog("code: %d\n", resp->status.code);
 
+    return resp;
+    // FIXME: Free url
+}
+
+U0 @slon_activitypub_async_accept_request(JsonObject* o)
+{
+    JsonObject* request = o->o("request");
+    if (!StrICmp("accept", request->@("type")) || !StrICmp("reject", request->@("type"))) {
+        return;
+    }
+    Sleep(1000);
+
+    U8 scratch_buffer[1024];
+
+    U8* this_actor = db->o("actors")->o(o->@("user"))->@("id");
+
+    StrPrint(scratch_buffer, "%s/accept/%d", this_actor, Now);
+    JsonObject* accept_object = Json.CreateObject();
+    accept_object->set("@context", request->@("@context"), JSON_STRING);
+    accept_object->set("id", scratch_buffer, JSON_STRING);
+    accept_object->set("type", "Accept", JSON_STRING);
+    accept_object->set("actor", this_actor, JSON_STRING);
+    accept_object->set("object", request, JSON_OBJECT);
+
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    StrPrint(scratch_buffer, "%s/inbox", request->@("actor"));
+    @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, accept_object);
     Free(fetch_buffer);
+    Json.Delete(accept_object);
 }
 
 U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
 {
-    Sleep(2000);
+    Sleep(1000);
     U8 scratch_buffer[2048];
 
     U8* this_actor = StrNew(status->@("uri"), adam_task);
@@ -424,85 +486,11 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     note_object->set("shares", SLON_EMPTY_JSON_OBJECT, JSON_OBJECT);
 
     create_object->set("object", note_object, JSON_OBJECT);
-    U8* create_object_s = Json.Stringify(create_object);
-
-    U8 content_hash[512];
-    calc_sha_256(content_hash, create_object_s, StrLen(create_object_s));
-    U8* computed_digest = @base64_encode(content_hash, 32);
-
-    JsonObject* http_headers = Json.CreateObject();
-
-    StrPrint(scratch_buffer, "%s/inbox", dest);
-    HttpUrl* url = @http_parse_url(scratch_buffer);
-
-    CDateStruct ds;
-    Date2Struct(&ds, Now + 1043910000);
-    StrPrint(scratch_buffer, "%03tZ, %02d %03tZ %04d %02d:%02d:%02d GMT", ds.day_of_week, "ST_DAYS_OF_WEEK", ds.day_of_mon, ds.mon - 1, "ST_MONTHS",
-        ds.year, ds.hour, ds.min, ds.sec);
-    http_headers->set("Date", scratch_buffer, JSON_STRING);
-
-    StrPrint(scratch_buffer, "SHA-256=%s", computed_digest);
-    http_headers->set("Digest", scratch_buffer, JSON_STRING);
-
-    http_headers->set("Content-Type", "application/activity+json", JSON_STRING);
-
-    StrPrint(scratch_buffer, "");
-    String.Append(scratch_buffer, "(request-target): post %s\n", url->path);
-    String.Append(scratch_buffer, "host: %s\n", url->host);
-    String.Append(scratch_buffer, "date: %s\n", http_headers->@("Date"));
-    String.Append(scratch_buffer, "digest: %s\n", http_headers->@("Digest"));
-    String.Append(scratch_buffer, "content-type: %s", http_headers->@("Content-Type"));
-
-    AdamLog("headers_to_sign:\n```%s```\n", scratch_buffer);
-
-    calc_sha_256(content_hash, scratch_buffer, StrLen(scratch_buffer));
-
-    U8* user = StrFind("/users/", this_actor) + 7;
-    JsonObject* private_key_binary = db->o("private_keys_binary")->o(user);
-    if (!private_key_binary) {
-        I64 private_key_binary_size = 0;
-        private_key_binary = Json.CreateObject();
-        private_key_binary->set("data", @base64_decode(db->o("private_keys")->@(user), &private_key_binary_size), JSON_OBJECT);
-        private_key_binary->set("size", private_key_binary_size, JSON_NUMBER);
-        db->o("private_keys_binary")->set(user, private_key_binary, JSON_OBJECT);
-    }
-
-    I64 res;
-
-    // Import RSA key
-    U64 rsa_key = CAlloc(sizeof(U64) * 32, adam_task);
-    res = @rsa_import(private_key_binary->@("data"), private_key_binary->@("size"), rsa_key);
-    AdamLog("@rsa_import: res: %d\n", res);
-
-    U8 sig[256];
-    U64 siglen = 256;
-    res = @rsa_create_signature(sig, &siglen, content_hash, 32, rsa_key);
-    AdamLog("@rsa_create_signature: res: %d\n", res);
-    U8* computed_sig = @base64_encode(sig, 256);
-
-    StrCpy(scratch_buffer, "");
-    String.Append(scratch_buffer, "keyId=\"%s#main-key\",", this_actor);
-    String.Append(scratch_buffer, "algorithm=\"rsa-sha256\",");
-    String.Append(scratch_buffer, "headers=\"(request-target) host date digest content-type\",");
-    String.Append(scratch_buffer, "signature=\"%s\"", computed_sig);
-    http_headers->set("Signature", scratch_buffer, JSON_STRING);
-
     U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
-    @http_response* resp = Http.Post(url, fetch_buffer, create_object_s, http_headers);
-
-    if (!resp) {
-        @slon_log(LOG_HTTPD, "Could not POST Accept, invalid response from remote server");
-        Free(fetch_buffer);
-        return;
-    }
-
-    while (resp->state != HTTP_STATE_DONE) {
-        Sleep(1);
-    }
-
-    AdamLog("code: %d\n", resp->status.code);
-
+    StrPrint(scratch_buffer, "%s/inbox", dest);
+    @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, create_object);
     Free(fetch_buffer);
+    Json.Delete(create_object);
 }
 
 U0 @slon_activitypub_async_create_status(JsonObject* status)
@@ -519,7 +507,7 @@ U0 @slon_activitypub_async_create_status(JsonObject* status)
 
 U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
 {
-    Sleep(2000);
+    Sleep(1000);
     U8 scratch_buffer[2048];
 
     U8* this_actor = StrNew(status->@("uri"), adam_task);
@@ -540,85 +528,22 @@ U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
     ts_object->set("atomUri", status->@("uri"), JSON_STRING);
 
     delete_object->set("object", ts_object, JSON_OBJECT);
-    U8* delete_object_s = Json.Stringify(delete_object);
-
-    U8 content_hash[512];
-    calc_sha_256(content_hash, delete_object_s, StrLen(delete_object_s));
-    U8* computed_digest = @base64_encode(content_hash, 32);
-
-    JsonObject* http_headers = Json.CreateObject();
-
-    StrPrint(scratch_buffer, "%s/inbox", dest);
-    HttpUrl* url = @http_parse_url(scratch_buffer);
-
-    CDateStruct ds;
-    Date2Struct(&ds, Now + 1043910000);
-    StrPrint(scratch_buffer, "%03tZ, %02d %03tZ %04d %02d:%02d:%02d GMT", ds.day_of_week, "ST_DAYS_OF_WEEK", ds.day_of_mon, ds.mon - 1, "ST_MONTHS",
-        ds.year, ds.hour, ds.min, ds.sec);
-    http_headers->set("Date", scratch_buffer, JSON_STRING);
-
-    StrPrint(scratch_buffer, "SHA-256=%s", computed_digest);
-    http_headers->set("Digest", scratch_buffer, JSON_STRING);
-
-    http_headers->set("Content-Type", "application/activity+json", JSON_STRING);
-
-    StrPrint(scratch_buffer, "");
-    String.Append(scratch_buffer, "(request-target): post %s\n", url->path);
-    String.Append(scratch_buffer, "host: %s\n", url->host);
-    String.Append(scratch_buffer, "date: %s\n", http_headers->@("Date"));
-    String.Append(scratch_buffer, "digest: %s\n", http_headers->@("Digest"));
-    String.Append(scratch_buffer, "content-type: %s", http_headers->@("Content-Type"));
-
-    AdamLog("headers_to_sign:\n```%s```\n", scratch_buffer);
-
-    calc_sha_256(content_hash, scratch_buffer, StrLen(scratch_buffer));
-
-    U8* user = StrFind("/users/", this_actor) + 7;
-    JsonObject* private_key_binary = db->o("private_keys_binary")->o(user);
-    if (!private_key_binary) {
-        I64 private_key_binary_size = 0;
-        private_key_binary = Json.CreateObject();
-        private_key_binary->set("data", @base64_decode(db->o("private_keys")->@(user), &private_key_binary_size), JSON_OBJECT);
-        private_key_binary->set("size", private_key_binary_size, JSON_NUMBER);
-        db->o("private_keys_binary")->set(user, private_key_binary, JSON_OBJECT);
-    }
-
-    I64 res;
-
-    // Import RSA key
-    U64 rsa_key = CAlloc(sizeof(U64) * 32, adam_task);
-    res = @rsa_import(private_key_binary->@("data"), private_key_binary->@("size"), rsa_key);
-    AdamLog("@rsa_import: res: %d\n", res);
-
-    U8 sig[256];
-    U64 siglen = 256;
-    res = @rsa_create_signature(sig, &siglen, content_hash, 32, rsa_key);
-    AdamLog("@rsa_create_signature: res: %d\n", res);
-    U8* computed_sig = @base64_encode(sig, 256);
-
-    StrCpy(scratch_buffer, "");
-    String.Append(scratch_buffer, "keyId=\"%s#main-key\",", this_actor);
-    String.Append(scratch_buffer, "algorithm=\"rsa-sha256\",");
-    String.Append(scratch_buffer, "headers=\"(request-target) host date digest content-type\",");
-    String.Append(scratch_buffer, "signature=\"%s\"", computed_sig);
-    http_headers->set("Signature", scratch_buffer, JSON_STRING);
-
     U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
-    @http_response* resp = Http.Post(url, fetch_buffer, delete_object_s, http_headers);
-
-    if (!resp) {
-        @slon_log(LOG_HTTPD, "Could not POST Accept, invalid response from remote server");
-        Free(fetch_buffer);
-        return;
-    }
-
-    while (resp->state != HTTP_STATE_DONE) {
-        Sleep(1);
-    }
-
-    AdamLog("code: %d\n", resp->status.code);
-
+    StrPrint(scratch_buffer, "%s/inbox", dest);
+    @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, delete_object);
     Free(fetch_buffer);
+    Json.Delete(delete_object);
+}
+
+U0 @slon_activitypub_async_follow(JsonObject* follow)
+{
+    Sleep(1000);
+    U8 scratch_buffer[1024];
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    StrPrint(scratch_buffer, "%s/inbox", follow->@("object"));
+    @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, follow);
+    Free(fetch_buffer);
+    Json.Delete(follow);
 }
 
 U0 @slon_activitypub_async_delete_status(JsonObject* status)
@@ -633,6 +558,11 @@ U0 @slon_activitypub_async_delete_status(JsonObject* status)
     }
 }
 
+U0 @slon_activitypub_follow_fedi(JsonObject* follow)
+{
+    Spawn(&@slon_activitypub_async_follow, follow, "SlonAsyncFollowTask");
+}
+
 U0 @slon_activitypub_create_status_fedi(JsonObject* status)
 {
     Spawn(&@slon_activitypub_async_create_status, status, "SlonAsyncCreateTask");
@@ -643,6 +573,7 @@ U0 @slon_activitypub_delete_status_fedi(JsonObject* status)
     Spawn(&@slon_activitypub_async_delete_status, status, "SlonAsyncDeleteTask");
 }
 
+@slon_api_follow_fedi = &@slon_activitypub_follow_fedi;
 @slon_api_status_create_fedi = &@slon_activitypub_create_status_fedi;
 @slon_api_status_delete_fedi = &@slon_activitypub_delete_status_fedi;
 
@@ -683,8 +614,6 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
         Free(fetch_buffer);
         return NULL;
     }
-
-    Free(fetch_buffer);
 
     JsonObject* actor_object = Json.Parse(resp->body.data);
 
@@ -728,6 +657,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
 
     @slon_free(session, created_at);
     @slon_free(session, id);
+    Free(fetch_buffer);
 
     return account;
 }
