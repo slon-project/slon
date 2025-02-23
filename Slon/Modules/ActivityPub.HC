@@ -408,7 +408,7 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
     accept_object->set("object", request, JSON_OBJECT);
 
     U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
-    StrPrint(scratch_buffer, "%s/inbox", request->@("actor"));
+    StrPrint(scratch_buffer, "%s/inbox", o->@("actor_for_key_id"));
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, accept_object);
     Free(fetch_buffer);
     Json.Delete(accept_object);
@@ -820,6 +820,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 
     if (request_object) {
         JsonObject* o = Json.CreateObject();
+        o->set("actor_for_key_id", session->actor_for_key_id, JSON_STRING);
         o->set("user", user, JSON_STRING);
         o->set("request", request_object, JSON_OBJECT);
         Spawn(&@slon_activitypub_async_accept_request, o, "SlonAsyncAcceptTask");
