@@ -34,7 +34,7 @@
         </ul>
         <p class="menu-label">Manage</p>
         <ul class="menu-list">
-            <li><a onclick="manageAccounts()" id="menuitem-accounts">Accounts</a></li>
+            <li><a onclick="manageAccounts(0)" id="menuitem-accounts">Accounts</a></li>
             <li><a onclick="manageInstance()" id="menuitem-instance">Instance</a></li>
         </ul>
         <p class="menu-label">Diagnostics</p>
@@ -63,18 +63,29 @@
             setContent(html);
             setActiveLink("stats");
         }
-        async function manageAccounts() {
+        async function manageAccounts(page) {
             clearActiveLinks();
-            const request = new Request("/manage/accounts");
+            const request = new Request("/manage/accounts?skip=" + (page*10).toString());
             const response = await fetch(request);
-            const accounts = await response.json();
+            const result = await response.json();
+            const accounts = result["accounts"];
             let html = "<h4 class=\"title is-4\">Accounts</h4><div class=spacer></div>";
             if (accounts.length) {
-                html += "<table class=table><thead><tr><th>id</th><th>acct</th><th>display_name</th><th>type</th><th>delete</th></tr></head><tbody>";
+                html += "<table class=table><thead><tr><th></th><th>id</th><th>acct</th><th>display_name</th><th>type</th><th>delete</th></tr></head><tbody>";
                 for (let i = 0; i < accounts.length; i++) {
-                    html += "<tr><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["acct"] + "</td><td>" + accounts[i]["display_name"] + "</td><td>"+ (accounts[i]["remote_actor"] == undefined ? "local" : "remote") + "</td><td style=\"text-align:center\"><a href=\"javascript:confirmDeleteUser('" + accounts[i]["acct"] + "','" + accounts[i]["id"] + "');\">&#10060;</a></td><tr>";
+                    html += "<tr><td><img src=\"" + accounts[i]["avatar_static"] + "\" style=\"width:48px;height:48px\"></td><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["acct"] + "</td><td>" + accounts[i]["display_name"] + "</td><td>"+ (accounts[i]["remote_actor"] == undefined ? "local" : "remote") + "</td><td style=\"text-align:center\"><a href=\"javascript:confirmDeleteUser('" + accounts[i]["acct"] + "','" + accounts[i]["id"] + "');\">&#10060;</a></td><tr>";
                 }
                 html += "</tbody></table>";
+                html += "<nav class=\"pagination\" role=\"navigation\" aria-label=\"pagination\">";
+                html += "<ul class=\"pagination-list\">";
+                for (let i = 0; i < result["total"] / 10; i++) {
+                    html += "<li><a href=\"javascript:manageAccounts(" + i.toString() + ")\"class=\"pagination-link";
+                    if (i == result["skip"] / 10) {
+                        html += " is-current";
+                    }
+                    html += "\">" + (i+1).toString() + "</a></li>";
+                }
+                html += "</ul></nav>";
             } else {
                 html += "No users";
             }
@@ -87,7 +98,7 @@
                 const request = new Request("/delete/account?id=" + id);
                 const response = await fetch(request);
                 const empty_json = await response.json();
-                manageAccounts();
+                manageAccounts(0);
             }
         }
         function manageNewUser() {
@@ -142,7 +153,7 @@
             const response = await fetch(request);
             const json = await response.json();
             if (!Object.keys(json).length) {
-                manageAccounts();
+                manageAccounts(0);
             } else {
                 alert(JSON.stringify(json));
             }

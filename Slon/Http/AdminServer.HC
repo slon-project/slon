@@ -264,7 +264,25 @@ U0 @slon_admin_new_account(SlonHttpSession* session)
 
 U0 @slon_admin_manage_accounts(SlonHttpSession* session)
 {
-    session->send(db->a("accounts"));
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    JsonArray* results = Json.CreateArray();
+    I64 skip = Str2I64(request_json->@("skip"));
+    I64 limit = 10;
+    I64 i;
+    I64 count = 0;
+    JsonArray* accounts = db->a("accounts");
+    for (i = skip; i < accounts->length && i < skip + limit; i++) {
+        results->append(Json.CreateItem(accounts->@(i), JSON_OBJECT));
+        ++count;
+    }
+    JsonObject* o = Json.CreateObject();
+    o->set("total", accounts->length, JSON_NUMBER);
+    o->set("skip", skip, JSON_NUMBER);
+    o->set("count", count, JSON_NUMBER);
+    o->set("accounts", results, JSON_ARRAY);
+    session->send(o);
 }
 
 U0 @slon_admin_info_stats(SlonHttpSession* session)
