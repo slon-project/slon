@@ -1,6 +1,23 @@
 U0 (*@slon_api_follow_fedi)(JsonObject* follow) = NULL;
 extern U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array);
 
+JsonObject* @slon_accounts_default_relationship_object()
+{
+    JsonObject* relationship = Json.CreateObject();
+    relationship->set("following", FALSE, JSON_BOOLEAN);
+    relationship->set("showing_reblogs", TRUE, JSON_BOOLEAN);
+    relationship->set("notifying", FALSE, JSON_BOOLEAN);
+    relationship->set("followed_by", FALSE, JSON_BOOLEAN);
+    relationship->set("blocking", FALSE, JSON_BOOLEAN);
+    relationship->set("blocked_by", FALSE, JSON_BOOLEAN);
+    relationship->set("muting", FALSE, JSON_BOOLEAN);
+    relationship->set("muting_notifications", FALSE, JSON_BOOLEAN);
+    relationship->set("requested", FALSE, JSON_BOOLEAN);
+    relationship->set("domain_blocking", FALSE, JSON_BOOLEAN);
+    relationship->set("endorsed", FALSE, JSON_BOOLEAN);
+    return relationship;
+}
+
 JsonObject* @slon_accounts_create_local_for_remote_actor(SlonHttpSession* session, JsonObject* actor_object, U8* remote_actor, HttpUrl* url)
 {
     if (!actor_object || !remote_actor) {
@@ -117,19 +134,10 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                         }
                     }
                 }
-                JsonObject* relationship = Json.CreateObject();
+                JsonObject* relationship = @slon_accounts_default_relationship_object;
                 relationship->set("id", acct->@("id"), JSON_STRING);
                 relationship->set("following", TRUE, JSON_BOOLEAN);
-                relationship->set("showing_reblogs", TRUE, JSON_BOOLEAN);
-                relationship->set("notifying", FALSE, JSON_BOOLEAN);
                 relationship->set("followed_by", followed_by, JSON_BOOLEAN);
-                relationship->set("blocking", FALSE, JSON_BOOLEAN);
-                relationship->set("blocked_by", FALSE, JSON_BOOLEAN);
-                relationship->set("muting", FALSE, JSON_BOOLEAN);
-                relationship->set("muting_notifications", FALSE, JSON_BOOLEAN);
-                relationship->set("requested", FALSE, JSON_BOOLEAN);
-                relationship->set("domain_blocking", FALSE, JSON_BOOLEAN);
-                relationship->set("endorsed", FALSE, JSON_BOOLEAN);
                 session->send(relationship);
                 return;
             }
@@ -179,19 +187,10 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                             }
                         }
                     }
-                    JsonObject* relationship = Json.CreateObject();
+                    JsonObject* relationship = @slon_accounts_default_relationship_object;
                     relationship->set("id", target_account->@("id"), JSON_STRING);
                     relationship->set("following", following, JSON_BOOLEAN);
-                    relationship->set("showing_reblogs", TRUE, JSON_BOOLEAN);
-                    relationship->set("notifying", FALSE, JSON_BOOLEAN);
                     relationship->set("followed_by", followed_by, JSON_BOOLEAN);
-                    relationship->set("blocking", FALSE, JSON_BOOLEAN);
-                    relationship->set("blocked_by", FALSE, JSON_BOOLEAN);
-                    relationship->set("muting", FALSE, JSON_BOOLEAN);
-                    relationship->set("muting_notifications", FALSE, JSON_BOOLEAN);
-                    relationship->set("requested", FALSE, JSON_BOOLEAN);
-                    relationship->set("domain_blocking", FALSE, JSON_BOOLEAN);
-                    relationship->set("endorsed", FALSE, JSON_BOOLEAN);
                     relationships->append(Json.CreateItem(relationship, JSON_OBJECT));
                 }
             }
