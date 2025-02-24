@@ -65,7 +65,7 @@
         }
         async function manageAccounts(page) {
             clearActiveLinks();
-            const request = new Request("/manage/accounts?skip=" + (page*10).toString());
+            const request = new Request("/manage/accounts?skip=" + (page * 10).toString());
             const response = await fetch(request);
             const result = await response.json();
             const accounts = result["accounts"];
@@ -73,7 +73,7 @@
             if (accounts.length) {
                 html += "<table class=table><thead><tr><th></th><th>id</th><th>acct</th><th>display_name</th><th>type</th><th>delete</th></tr></head><tbody>";
                 for (let i = 0; i < accounts.length; i++) {
-                    html += "<tr><td><img src=\"" + accounts[i]["avatar_static"] + "\" style=\"width:48px;height:48px\"></td><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["acct"] + "</td><td>" + accounts[i]["display_name"] + "</td><td>"+ (accounts[i]["remote_actor"] == undefined ? "local" : "remote") + "</td><td style=\"text-align:center\"><a href=\"javascript:confirmDeleteUser('" + accounts[i]["acct"] + "','" + accounts[i]["id"] + "');\">&#10060;</a></td><tr>";
+                    html += "<tr><td><img src=\"" + accounts[i]["avatar_static"] + "\" style=\"width:48px;height:48px\"></td><td>" + accounts[i]["id"] + "</td><td>" + accounts[i]["acct"] + "</td><td>" + accounts[i]["display_name"] + "</td><td>" + (accounts[i]["remote_actor"] == undefined ? "local" : "remote") + "</td><td style=\"text-align:center\"><a href=\"javascript:confirmDeleteUser('" + accounts[i]["acct"] + "','" + accounts[i]["id"] + "');\">&#10060;</a></td><tr>";
                 }
                 html += "</tbody></table>";
                 html += "<nav class=\"pagination\" role=\"navigation\" aria-label=\"pagination\">";
@@ -83,7 +83,7 @@
                     if (i == result["skip"] / 10) {
                         html += " is-current";
                     }
-                    html += "\">" + (i+1).toString() + "</a></li>";
+                    html += "\">" + (i + 1).toString() + "</a></li>";
                 }
                 html += "</ul></nav>";
             } else {
@@ -93,8 +93,32 @@
             setContent(html);
             setActiveLink("accounts");
         }
+        async function manageInstance() {
+            clearActiveLinks();
+            const request = new Request("/manage/instance");
+            const response = await fetch(request);
+            const instance = await response.json();
+            let html = "<h4 class=\"title is-4\">Instance</h4><div class=spacer></div>";
+
+            html += "<form action=\"javascript:saveInstance()\"><div>";
+
+            html += "<div class=\"section is-inline-block\" style=\"width:420px;vertical-align:top\">";
+            html += "<label class=label>URI</label><div class=control><input id=uri class=input placeholder=my-slon-instance.foo required autocomplete=off value=\"" + instance["uri"] + "\"></div><div class=spacer></div>";
+            html += "<label class=label>Title</label><div class=control><input id=title class=input placeholder=\"My Slon Instance\" required autocomplete=off value=\"" + instance["title"] + "\"></div><div class=spacer></div>";
+            html += "<label class=label>Description</label><div class=control><input id=description class=input placeholder=\"A fediverse instance running on TempleOS\" required autocomplete=off value=\"" + instance["description"] + "\"></div><div class=spacer></div>";
+            html += "<label class=label>Email</label><div class=control><input id=email class=input type=email placeholder=\"alec@checksum.fail\" required autocomplete=off value=\"" + instance["email"] + "\"></div><div class=spacer></div>";
+            html += "<label class=label>Enable Registrations</label><div class=control><input id=registrations type=checkbox" + (instance["registrations"] ? " checked" : "") + "></div><div class=spacer></div>";
+            html += "</div>";
+
+            html += "</div>";
+            html += "<div class=\"control next\"><input class=\"button is-link\" type=submit value=Save></div>"
+            html += "</div></form>";
+
+            setContent(html);
+            setActiveLink("instance");
+        }
         async function confirmDeleteUser(user, id) {
-            if(confirm("Are you sure you want to delete '" + user + "' ?")) {
+            if (confirm("Are you sure you want to delete '" + user + "' ?")) {
                 const request = new Request("/delete/account?id=" + id);
                 const response = await fetch(request);
                 const empty_json = await response.json();
@@ -157,6 +181,28 @@
             } else {
                 alert(JSON.stringify(json));
             }
+        }
+        async function saveInstance() {
+            let data = {};
+            let fields = document.getElementsByTagName("input");
+            for (var i = 0; i < fields.length; i++) {
+                switch (fields[i].type) {
+                    case "checkbox":
+                        data[fields[i].id] = fields[i].checked;
+                        break;
+                    case "submit":
+                        break;
+                    default:
+                        data[fields[i].id] = fields[i].value;
+                        break;
+                }
+            }
+            const request = new Request("/save/instance", {
+                headers: { "Content-Type": "application/json" },
+                method: "POST",
+                body: JSON.stringify(data)
+            });
+            const response = await fetch(request);
         }
         function updateBase64(el) {
             let reader = new FileReader();

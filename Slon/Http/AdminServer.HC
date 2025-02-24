@@ -324,6 +324,10 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
         @slon_admin_manage_accounts(session);
         return;
     }
+    if (!StrICmp("/manage/instance", session->path())) {
+        session->send(db->o("instance"));
+        return;
+    }
 
     if (!StrICmp("/", session->path())) {
         @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/main.html");
@@ -357,7 +361,7 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
         @slon_http_parse_request_as_json(session);
     }
 
-    if (!StrICmp("/setup/instance", session->path())) {
+    if (!StrICmp("/setup/instance", session->path()) || !StrICmp("/save/instance", session->path())) {
         @slon_admin_setup_instance(session);
         return;
     }
