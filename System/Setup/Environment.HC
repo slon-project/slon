@@ -51,15 +51,6 @@ I64 @t(Bool _condition, I64 _true, I64 _false)
     return _false;
 }
 
-// Before doing anything else, we:
-
-// 1. Mark memory in code heap below 0x1000000 as used.
-sys_code_bp->mem_free_lst->next->pags = 0;
-
-// 2. Free up 64MB at bottom of code heap for non-HolyC programs
-sys_code_bp->mem_free_lst = ShrinkMemBlkByPags(sys_code_bp->mem_free_lst, 131072);
-
-// 3. Enable SSE
 @sse_enable;
 
 U0 dd() { DocDump(adam_task->put_doc); }
