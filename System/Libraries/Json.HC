@@ -41,6 +41,12 @@
 
 #define JSON_SIG 0xFABACEAE
 
+class @json_stringify_string
+{
+    I64 length;
+    U8* value;
+}
+
 class @json_element
 {
     U32 sig;
@@ -206,8 +212,11 @@ U0 @json_rstrip(U8* str)
 {
     if (!str || !StrLen(str))
         return;
-    while (str[StrLen(str) - 1] == ' ' || str[StrLen(str) - 1] == '\r' || str[StrLen(str) - 1] == '\n' || str[StrLen(str) - 1] == '\t ')
-        str[StrLen(str) - 1] = NULL;
+    I64 r_pos = StrLen(str) - 1;
+    while (str[r_pos] == ' ' || str[r_pos] == '\r' || str[r_pos] == '\n' || str[r_pos] == '\t') {
+        str[r_pos] = NULL;
+        --r_pos;
+    }
 }
 
 extern @json_element* @json_parse_object_or_array(@json_parser* parser);
@@ -788,102 +797,88 @@ U0 @json_insert_item(@json_array* arr, @json_item* insert_item, I64 index)
     arr->length++;
 }
 
-U0 @json_stringify_append_char(U8* str, U8 char)
+U0 @json_stringify_append_char(@json_stringify_string* str, U8 char)
 {
     // FIXME: unicode
-    I64 len = StrLen(str);
     switch (char) {
     case '\\':
-        str[len] = '\\';
-        str[len + 1] = '\\';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = '\\';
         break;
     case 0x08:
-        str[len] = '\\';
-        str[len + 1] = 'b';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'b';
         break;
     case 0x0c:
-        str[len] = '\\';
-        str[len + 1] = 'f';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'f';
         break;
     case 0x0a:
-        str[len] = '\\';
-        str[len + 1] = 'n';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'n';
         break;
     case 0x0d:
-        str[len] = '\\';
-        str[len + 1] = 'r';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'r';
         break;
     case 0x09:
-        str[len] = '\\';
-        str[len + 1] = 't';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 't';
         break;
     default:
-        str[len] = char;
-        str[len + 1] = NULL;
+        str->value[str->length++] = char;
         break;
     }
+    str->value[str->length] = NULL;
 }
 
-U0 @json_stringify_append_char_escape_quotes(U8* str, U8 char)
+U0 @json_stringify_append_char_escape_quotes(@json_stringify_string* str, U8 char)
 {
     // FIXME: unicode
-    I64 len = StrLen(str);
     switch (char) {
     case '"':
-        str[len] = '\\';
-        str[len + 1] = '"';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = '"';
         break;
     case '\\':
-        str[len] = '\\';
-        str[len + 1] = '\\';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = '\\';
         break;
     case 0x08:
-        str[len] = '\\';
-        str[len + 1] = 'b';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'b';
         break;
     case 0x0c:
-        str[len] = '\\';
-        str[len + 1] = 'f';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'f';
         break;
     case 0x0a:
-        str[len] = '\\';
-        str[len + 1] = 'n';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'n';
         break;
     case 0x0d:
-        str[len] = '\\';
-        str[len + 1] = 'r';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 'r';
         break;
     case 0x09:
-        str[len] = '\\';
-        str[len + 1] = 't';
-        str[len + 2] = NULL;
+        str->value[str->length++] = '\\';
+        str->value[str->length++] = 't';
         break;
     default:
-        str[len] = char;
-        str[len + 1] = NULL;
+        str->value[str->length++] = char;
         break;
     }
+    str->value[str->length] = NULL;
 }
 
-U0 @json_stringify_append_str(U8* str, U8* str2)
+U0 @json_stringify_append_str(@json_stringify_string* str, U8* str2)
 {
     while (*str2) {
         // NOTE: We keep escaped unicode in its original form, and let the program ingesting the JSON handle the UTF-8 conversion.
         if (*str2 == '\\' && *(str2 + 1) == 'u') {
-            str[StrLen(str)] = '\\';
-            str[StrLen(str)] = 'u';
+            str->value[str->length++] = '\\';
+            str->value[str->length++] = 'u';
+            str->value[str->length] = NULL;
             str2++;
         } else {
             @json_stringify_append_char_escape_quotes(str, *str2);
@@ -892,7 +887,7 @@ U0 @json_stringify_append_str(U8* str, U8* str2)
     }
 }
 
-U0 @json_stringify_append_number(U8* str, F64 num)
+U0 @json_stringify_append_number(@json_stringify_string* str, F64 num)
 {
     U8 buf[256];
     MemSet(buf, 0, 256);
@@ -908,9 +903,9 @@ U0 @json_stringify_append_number(U8* str, F64 num)
     @json_stringify_append_str(str, buf);
 }
 
-extern U0 @json_stringify_object_or_array(U8* str, @json_element* el);
+extern U0 @json_stringify_object_or_array(@json_stringify_string* str, @json_element* el);
 
-U0 @json_stringify_object(U8* str, @json_object* obj)
+U0 @json_stringify_object(@json_stringify_string* str, @json_object* obj)
 {
     @json_stringify_append_char(str, '{');
     @json_key* key = obj->keys;
@@ -951,7 +946,7 @@ U0 @json_stringify_object(U8* str, @json_object* obj)
     @json_stringify_append_char(str, '}');
 }
 
-U0 @json_stringify_array(U8* str, @json_array* arr)
+U0 @json_stringify_array(@json_stringify_string* str, @json_array* arr)
 {
     @json_stringify_append_char(str, '[');
     @json_item* item = arr->items;
@@ -988,7 +983,7 @@ U0 @json_stringify_array(U8* str, @json_array* arr)
     @json_stringify_append_char(str, ']');
 }
 
-U0 @json_stringify_object_or_array(U8* str, @json_element* el)
+U0 @json_stringify_object_or_array(@json_stringify_string* str, @json_element* el)
 {
     while (el) {
         switch (el->type) {
@@ -1011,9 +1006,13 @@ U0 @json_stringify_object_or_array(U8* str, @json_element* el)
 
 U8* @json_stringify(@json_element* el, I64 buf_size = JSON_STRINGIFY_BUF_SIZE)
 {
-    U8* str = CAlloc(buf_size, adam_task);
+    // U8* str = CAlloc(buf_size, adam_task);
+    @json_stringify_string* str = CAlloc(sizeof(@json_stringify_string), adam_task);
+    U8* value = CAlloc(buf_size, adam_task);
+    str->value = value;
     @json_stringify_object_or_array(str, el);
-    return str;
+    Free(str);
+    return value;
 }
 
 U64 @json_get(@json_object* obj, U8* key, Bool return_key = FALSE)
