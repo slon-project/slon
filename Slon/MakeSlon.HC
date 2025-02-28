@@ -18,6 +18,7 @@ WinMax(Fs);
 #include "Api/V1/Filters";
 #include "Api/V1/FollowRequests";
 #include "Api/V1/FollowedTags";
+#include "Api/V1/Markers";
 #include "Api/V1/Notifications";
 #include "Api/V1/Statuses";
 #include "Api/V1/Timelines";

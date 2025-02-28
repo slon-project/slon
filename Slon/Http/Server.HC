@@ -526,6 +526,7 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
     #include "Endpoints/Get/FollowRequests";
     #include "Endpoints/Get/FollowedTags";
     #include "Endpoints/Get/Instance";
+    #include "Endpoints/Get/Markers";
     #include "Endpoints/Get/Notifications";
     #include "Endpoints/Get/NodeInfo";
     #include "Endpoints/Get/OAuth";
@@ -587,6 +588,7 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
     #include "Endpoints/Post/Accounts";
     #include "Endpoints/Post/ActivityPub";
     #include "Endpoints/Post/Apps";
+    #include "Endpoints/Post/Markers";
     #include "Endpoints/Post/OAuth";
     #include "Endpoints/Post/Statuses";
 

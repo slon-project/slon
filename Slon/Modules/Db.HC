@@ -86,6 +86,26 @@ U0 @slon_db_load_following_from_disk()
     db->set("following", following, JSON_OBJECT);
 }
 
+U0 @slon_db_load_markers_from_disk()
+{
+    JsonObject* markers = Json.CreateObject();
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/markers/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonArray* marker_array = NULL;
+    while (de) {
+        marker_array = Json.ParseFile(de->full_name);
+        if (marker_array) {
+            StrFind(".json", de->name)[0] = NULL;
+            markers->set(de->name, marker_array, JSON_ARRAY);
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("markers", markers, JSON_OBJECT);
+}
+
 U0 @slon_db_load_statuses_from_disk()
 {
     JsonObject* statuses = Json.CreateObject();
@@ -196,6 +216,17 @@ U0 @slon_db_save_following_to_disk()
     }
 }
 
+U0 @slon_db_save_markers_to_disk()
+{
+    U8 scratch_buffer[256];
+    JsonKey* key = db->o("markers")->keys;
+    while (key) {
+        StrPrint(scratch_buffer, "%s/markers/%s.json", SLON_DB_PATH, key->name);
+        Json.DumpToFile(scratch_buffer, key->value);
+        key = key->next;
+    }
+}
+
 U0 @slon_db_save_statuses_to_disk()
 {
     U8 scratch_buffer[256];
@@ -228,6 +259,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_followers_to_disk();
     @slon_db_save_following_to_disk();
     @slon_db_save_instance_to_disk();
+    @slon_db_save_markers_to_disk();
     @slon_db_save_oauth_to_disk();
     @slon_db_save_private_keys_to_disk();
     @slon_db_save_statuses_to_disk();
@@ -246,6 +278,7 @@ U0 @slon_db_load_from_defaults()
     db->set("followers", Json.CreateObject(), JSON_OBJECT);
     db->set("following", Json.CreateObject(), JSON_OBJECT);
     db->set("instance", Json.ParseFile("M:/Slon/Static/defaults/instance.json"), JSON_OBJECT);
+    db->set("markers", Json.CreateObject(), JSON_OBJECT);
     db->set("statuses", Json.CreateObject(), JSON_OBJECT);
     db->set("timelines", Json.CreateObject(), JSON_OBJECT);
     db->o("timelines")->set("home", Json.CreateObject(), JSON_OBJECT);
@@ -271,6 +304,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_followers_from_disk();
     @slon_db_load_following_from_disk();
     @slon_db_load_instance_from_disk();
+    @slon_db_load_markers_from_disk();
     @slon_db_load_oauth_from_disk();
     @slon_db_load_statuses_from_disk();
     @slon_db_load_timelines_from_disk();
