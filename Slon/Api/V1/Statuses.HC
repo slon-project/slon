@@ -138,24 +138,59 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
             return;
         }
         U8* id = session->path(3);
+        JsonArray* statuses_in_context = NULL;
+        Bool context = FALSE;
+
+        if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
+            statuses_in_context = Json.CreateArray();
+            context = TRUE;
+        }
+
+    slon_api_v1_statuses_context_loop:
         // FIXME: Unify statuses in database, until then, we do the following:
         JsonObject* status = NULL;
         // Lookup in public timeline
         status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->a("public"));
         if (status) {
-            session->send(status);
-            return;
+            switch (context) {
+            case TRUE:
+                statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
+                break;
+            default:
+                session->send(status);
+                return;
+            }
         }
         // Then, lookup in home timeline
         status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
         if (status) {
-            session->send(status);
-            return;
+            switch (context) {
+            case TRUE:
+                statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
+                break;
+            default:
+                session->send(status);
+                return;
+            }
         }
         // Finally, lookup in our statuses
         status = @slon_api_v1_statuses_lookup_by_id(id, db->o("statuses")->a(account_id));
         if (status) {
-            session->send(status);
+            switch (context) {
+            case TRUE:
+                statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
+                break;
+            default:
+                session->send(status);
+                return;
+            }
+        }
+        if (status && context && status->@("in_reply_to_id")) {
+            id = status->@("in_reply_to_id");
+            goto slon_api_v1_statuses_context_loop;
+        }
+        if (statuses_in_context) {
+            session->send(statuses_in_context);
             return;
         }
         session->status(404);
