@@ -69,7 +69,7 @@
             const response = await fetch(request);
             const result = await response.json();
             const accounts = result["accounts"];
-            let html = "<h4 class=\"title is-4\">Accounts</h4><div class=spacer></div>";
+            let html = "<h4 class=\"title is-4\">Accounts</h4><div class=spacer></div><div>" + result["total"].toString() + " known account(s)</div><div class=spacer></div>";
             if (accounts.length) {
                 html += "<table class=table><thead><tr><th></th><th>id</th><th>acct</th><th>display_name</th><th>type</th><th>delete</th></tr></head><tbody>";
                 for (let i = 0; i < accounts.length; i++) {
