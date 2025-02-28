@@ -1,6 +1,22 @@
 U0 (*@slon_api_status_create_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_delete_fedi)(JsonObject* status) = NULL;
 
+JsonObject* @slon_api_v1_statuses_lookup_by_id(U8* id, JsonArray* statuses)
+{
+    if (!id || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (status->@("id") && !StrICmp(status->@("id"), id)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
 U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -107,6 +123,42 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
 
     slon_api_v1_statuses_delete_return:
         session->send(SLON_EMPTY_JSON_OBJECT);
+    } else {
+        session->status(401);
+    }
+}
+
+U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
+{
+    if (@slon_api_authorized(session)) {
+        SLON_AUTH_ACCOUNT_ID
+
+        if (session->path_count() < 4) {
+            session->status(400);
+            return;
+        }
+        U8* id = session->path(3);
+        // FIXME: Unify statuses in database, until then, we do the following:
+        JsonObject* status = NULL;
+        // Lookup in public timeline
+        status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->a("public"));
+        if (status) {
+            session->send(status);
+            return;
+        }
+        // Then, lookup in home timeline
+        status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
+        if (status) {
+            session->send(status);
+            return;
+        }
+        // Finally, lookup in our statuses
+        status = @slon_api_v1_statuses_lookup_by_id(id, db->o("statuses")->a(account_id));
+        if (status) {
+            session->send(status);
+            return;
+        }
+        session->status(404);
     } else {
         session->status(401);
     }
