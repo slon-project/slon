@@ -513,6 +513,7 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
     #include "Endpoints/Get/NodeInfo";
     #include "Endpoints/Get/OAuth";
     #include "Endpoints/Get/Search";
+    #include "Endpoints/Get/Statuses";
     #include "Endpoints/Get/Suggestions";
     #include "Endpoints/Get/Timelines";
     #include "Endpoints/Get/Web";
