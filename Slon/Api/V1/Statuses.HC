@@ -17,6 +17,30 @@ JsonObject* @slon_api_v1_statuses_lookup_by_id(U8* id, JsonArray* statuses)
     return NULL;
 }
 
+JsonObject* @slon_api_v1_statuses_find_by_id(U8* id, U8* account_id)
+{
+    if (!id || !account_id) {
+        return NULL;
+    }
+    JsonObject* status = NULL;
+    // Lookup in public timeline
+    status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->a("public"));
+    if (status) {
+        return status;
+    }
+    // Then, lookup in home timeline
+    status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
+    if (status) {
+        return status;
+    }
+    // Finally, lookup in account's statuses
+    status = @slon_api_v1_statuses_lookup_by_id(id, db->o("statuses")->a(account_id));
+    if (status) {
+        return status;
+    }
+    return NULL;
+}
+
 U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -140,63 +164,41 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
             session->status(400);
             return;
         }
+
+        if (session->path_count() > 4 && !StrICmp("history", session->path(4))) {
+            // NOTE: We probably won't support this any time soon
+            session->send(SLON_EMPTY_JSON_ARRAY);
+            return;
+        }
+
         U8* id = session->path(3);
-        JsonArray* statuses_in_context = NULL;
-        Bool context = FALSE;
+        JsonObject* status = NULL;
 
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
-            statuses_in_context = Json.CreateArray();
-            context = TRUE;
+            JsonObject* context = Json.CreateObject();
+            context->set("ancestors", Json.CreateArray(), JSON_ARRAY);
+            context->set("descendants", Json.CreateArray(), JSON_ARRAY);
+
+            // Get ancestors
+            id = session->path(3);
+            status = @slon_api_v1_statuses_find_by_id(id, account_id);
+            while (status && status->@("in_reply_to_id")) {
+                id = status->@("in_reply_to_id");
+                status = @slon_api_v1_statuses_find_by_id(id, account_id);
+                if (status) {
+                    context->a("ancestors")->append(Json.CreateItem(status, JSON_OBJECT));
+                }
+            }
+
+            // FIXME: Get descendants
+
+            session->send(context);
+            return;
         }
 
-    slon_api_v1_statuses_context_loop:
-        // FIXME: Unify statuses in database, until then, we do the following:
-        JsonObject* status = NULL;
-        // Lookup in public timeline
-        status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->a("public"));
+        status = @slon_api_v1_statuses_find_by_id(id, account_id);
         if (status) {
-            switch (context) {
-            case TRUE:
-                statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
-                goto slon_api_v1_statuses_context_continue;
-                break;
-            default:
-                session->send(status);
-                return;
-            }
-        }
-        // Then, lookup in home timeline
-        status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
-        if (status) {
-            switch (context) {
-            case TRUE:
-                statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
-                goto slon_api_v1_statuses_context_continue;
-                break;
-            default:
-                session->send(status);
-                return;
-            }
-        }
-        // Finally, lookup in our statuses
-        status = @slon_api_v1_statuses_lookup_by_id(id, db->o("statuses")->a(account_id));
-        if (status) {
-            switch (context) {
-            case TRUE:
-                statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
-                break;
-            default:
-                session->send(status);
-                return;
-            }
-        }
-    slon_api_v1_statuses_context_continue:
-        if (status && context && status->@("in_reply_to_id")) {
-            id = status->@("in_reply_to_id");
-            goto slon_api_v1_statuses_context_loop;
-        }
-        if (statuses_in_context) {
-            session->send(statuses_in_context);
+            session->send(status);
             return;
         }
         session->status(404);
