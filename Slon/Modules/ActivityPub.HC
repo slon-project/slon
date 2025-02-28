@@ -628,6 +628,22 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     return account;
 }
 
+U8* @slon_activitypub_status_id_by_uri(U8* uri, JsonArray* statuses)
+{
+    if (!uri || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (status->@("uri") && !StrICmp(status->@("uri"), uri)) {
+            return status->@("id");
+        }
+    }
+    return NULL;
+}
+
 U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -787,6 +803,13 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
                     media_attachment->set("meta", media_meta, JSON_OBJECT);
                     media_attachments->append(Json.CreateItem(media_attachment, JSON_OBJECT));
                 }
+            }
+        }
+
+        if (request_json->o("object")->@("inReplyTo") || request_json->o("object")->@("inReplyToAtomUri")) {
+            U8* reply_to_post_id = @slon_activitypub_status_id_by_uri(request_json->o("object")->@("inReplyTo"), db->o("timelines")->o("home")->a(account->@("id")));
+            if (reply_to_post_id) {
+                new_status->set("in_reply_to_id", reply_to_post_id, JSON_STRING);
             }
         }
 
