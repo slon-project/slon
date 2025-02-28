@@ -48,6 +48,9 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
     if (StrLen(request_json->@("min_id")) > 0) {
         min_id = Str2I64(request_json->@("min_id"));
     }
+    if (request_json->@("since_id") && StrLen(request_json->@("since_id")) > 0 && !min_id) {
+        min_id = Str2I64(request_json->@("since_id"));
+    }
     JsonArray* statuses = Json.CreateArray();
     JsonObject* status = NULL;
     if (status_array && status_array->length) {
