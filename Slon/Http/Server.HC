@@ -344,31 +344,52 @@ U0 @slon_http_debug_print_response(SlonHttpSession* session, Bool show_headers =
     }
 }
 
-U8* @slon_http_json_string_from_form_urlencoded_string(SlonHttpSession* session, U8* form_urlencoded_string)
+JsonObject* @slon_http_json_object_from_form_urlencoded_string(SlonHttpSession* session, U8* form_urlencoded_string)
 {
-    // FIXME: Implement arrays, objects per https://jsonapi.org/format/#fetching
-    U8* json_string = @slon_calloc(session, StrLen(form_urlencoded_string) * 2);
-    String.Append(json_string, "{");
+    // NOTE: We only support one-level arrays and objects, per examples given at https://docs.joinmastodon.org/client/intro/#types
+
+    JsonObject* obj = Json.CreateObject();
+
     U8* form_urlencoded_string_copy = @slon_strnew(session, form_urlencoded_string);
     I64 raw_values_count = 0;
     U8** raw_values = String.Split(form_urlencoded_string_copy, '&', &raw_values_count);
     I64 i = 0;
     U8* key;
     U8* value;
+    U8* sub_key = NULL;
+
     for (i = 0; i < raw_values_count; i++) {
-        value = StrFind("=", raw_values[i]) + 1;
+        value = @slon_http_decode_urlencoded_string(session, StrFind("=", raw_values[i]) + 1);
         *(StrFind("=", raw_values[i])) = NULL;
-        key = raw_values[i];
-        U8* decoded_value = @slon_http_decode_urlencoded_string(session, value);
-        String.Append(json_string, "\"%s\":\"%s\"", key, decoded_value);
-        @slon_free(session, decoded_value);
-        if (i < raw_values_count - 1) {
-            String.Append(json_string, ",");
+        key = @slon_http_decode_urlencoded_string(session, raw_values[i]);
+        if (String.EndsWith("[]", key)) {
+            // We have an array
+            StrFind("[]", key)[0] = NULL;
+            if (!obj->@(key)) {
+                obj->set(key, Json.CreateArray(), JSON_ARRAY);
+            }
+            obj->a(key)->append(Json.CreateItem(value, JSON_STRING));
+        } else if (StrFind("[", key) > 0) {
+            // We have an object
+            sub_key = StrFind("[", key) + 1;
+            while (sub_key[StrLen(sub_key) - 1] == ']') {
+                sub_key[StrLen(sub_key) - 1] = NULL;
+            }
+            StrFind("[", key)[0] = NULL;
+            if (!obj->@(key)) {
+                obj->set(key, Json.CreateObject(), JSON_OBJECT);
+            }
+            obj->o(key)->set(sub_key, value, JSON_STRING);
+        } else {
+            // We have a boring old parameter
+            obj->set(key, value, JSON_STRING);
         }
+
+        @slon_free(session, value);
+        @slon_free(session, key);
     }
-    String.Append(json_string, "}");
     @slon_free(session, form_urlencoded_string_copy);
-    return json_string;
+    return obj;
 }
 
 U8* @slon_http_json_string_from_multipart_form_data(SlonHttpSession* session, U8* multipart_form_data)
@@ -449,18 +470,14 @@ U0 @slon_http_parse_query_string(SlonHttpSession* session)
     I64 raw_path_split_count = 0;
     U8** raw_path_split = String.Split(raw_path_copy, '?', &raw_path_split_count);
     if (raw_path_split_count > 1) {
-        U8* json_string = @slon_http_json_string_from_form_urlencoded_string(session, raw_path_split[1]);
-        session->request->json = Json.Parse(json_string);
-        @slon_free(session, json_string);
+        session->request->json = @slon_http_json_object_from_form_urlencoded_string(session, raw_path_split[1]);
     }
     @slon_free(session, raw_path_copy);
 }
 
 U0 @slon_http_parse_request_as_form_urlencoded(SlonHttpSession* session)
 {
-    U8* json_string = @slon_http_json_string_from_form_urlencoded_string(session, session->request->data);
-    session->request->json = Json.Parse(json_string);
-    @slon_free(session, json_string);
+    session->request->json = @slon_http_json_object_from_form_urlencoded_string(session, session->request->data);
 }
 
 U0 @slon_http_parse_request_as_multipart_form_data(SlonHttpSession* session)
