@@ -158,6 +158,7 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
             switch (context) {
             case TRUE:
                 statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
+                goto slon_api_v1_statuses_context_continue;
                 break;
             default:
                 session->send(status);
@@ -170,6 +171,7 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
             switch (context) {
             case TRUE:
                 statuses_in_context->append(Json.CreateItem(status, JSON_OBJECT));
+                goto slon_api_v1_statuses_context_continue;
                 break;
             default:
                 session->send(status);
@@ -188,6 +190,7 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
                 return;
             }
         }
+    slon_api_v1_statuses_context_continue:
         if (status && context && status->@("in_reply_to_id")) {
             id = status->@("in_reply_to_id");
             goto slon_api_v1_statuses_context_loop;
