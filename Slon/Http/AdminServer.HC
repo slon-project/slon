@@ -328,6 +328,10 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
         session->send(db->o("instance"));
         return;
     }
+    if (!StrICmp("/manage/settings", session->path())) {
+        session->send(db->o("settings"));
+        return;
+    }
 
     if (!StrICmp("/", session->path())) {
         @slon_http_send_html_file(session, "M:/Slon/Static/html/admin/main.html");
@@ -355,6 +359,17 @@ U0 @slon_admin_setup_instance(SlonHttpSession* session)
     session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
+U0 @slon_admin_save_settings(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    db->set("settings", request_json, JSON_OBJECT);
+    @slon_db_save_settings_to_disk;
+
+    session->send(SLON_EMPTY_JSON_OBJECT);
+}
+
 U0 @slon_admin_server_post(SlonHttpSession* session)
 {
     if (StrFind("json", session->header("content-type")) > 0) {
@@ -363,6 +378,11 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
 
     if (!StrICmp("/setup/instance", session->path()) || !StrICmp("/save/instance", session->path())) {
         @slon_admin_setup_instance(session);
+        return;
+    }
+
+    if (!StrICmp("/save/settings", session->path())) {
+        @slon_admin_save_settings(session);
         return;
     }
 

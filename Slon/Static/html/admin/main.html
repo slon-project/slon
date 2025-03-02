@@ -36,6 +36,7 @@
         <ul class="menu-list">
             <li><a onclick="manageAccounts(0)" id="menuitem-accounts">Accounts</a></li>
             <li><a onclick="manageInstance()" id="menuitem-instance">Instance</a></li>
+            <li><a onclick="manageSettings()" id="menuitem-settings">Settings</a></li>
         </ul>
         <p class="menu-label">Diagnostics</p>
         <ul class="menu-list">
@@ -45,6 +46,7 @@
     <div id="content" class="container main-content is-inline-block">
     </div>
     <script>
+        let obscured_setting_names = ["catbox_userhash"];
         function clearActiveLinks() {
             document.querySelectorAll("a").forEach(function (a) { a.className = ""; });
         }
@@ -116,6 +118,69 @@
 
             setContent(html);
             setActiveLink("instance");
+        }
+        async function manageSettings() {
+            clearActiveLinks();
+            const request = new Request("/manage/settings");
+            const response = await fetch(request);
+            const settings = await response.json();
+            const keys = Object.keys(settings);
+
+            let html = "<h4 class=\"title is-4\">Settings</h4><div class=spacer></div>";
+            html += "<form action=\"javascript:saveSettings()\"><div>";
+            html += "<table class=table><thead><tr><th>name</th><th>value</th><th>delete</th></tr></head><tbody>";
+            if (keys.length) {
+                for (let i = 0; i < keys.length; i++) {
+                    let inputType = "text";
+                    if (obscured_setting_names.indexOf(keys[i]) != -1) {
+                        inputType = "password";
+                    }
+                    html += "<tr><td>" + keys[i] + "</td><td><div class=control><input autocomplete=off class=input id=settings_" + keys[i] + " type=\"" + inputType + "\" value=\"" + settings[keys[i]] + "\"></div></td><td style=\"text-align:center\"><a href=\"javascript:deleteSetting('" + keys[i] + "');\">&#10060;</a></td>"
+                }
+            }
+            html += "</tbody></table>";
+            html += "<div class=\"control is-inline\"><input autocomplete=off class=\"input is-inline\" id=new_name placeholder=name></div> ";
+            html += "<div class=\"control is-inline\"><input autocomplete=off class=\"input is-inline\" id=new_value placeholder=value></div> ";
+            html += "<div class=\"control is-inline\"><input class=\"button is-inline\" onclick=\"addSetting()\" type=button value=Add></div> ";
+            html += "<div class=\"control next\"><input class=\"button is-link\" type=submit value=Save></div>";
+            html += "</div></form>";
+            setContent(html);
+            setActiveLink("settings");
+        }
+        function addSetting() {
+            let name = document.getElementById("new_name").value;
+            let value = document.getElementById("new_value").value;
+            if (name.indexOf(" ") != -1) {
+                alert("key can not contain spaces: " + name);
+                return;
+            }
+            if (document.getElementById("settings_" + name)) {
+                alert("key already exists: " + name);
+                return;
+            }
+            let inputType = "text";
+            if (obscured_setting_names.indexOf(name) != -1) {
+                inputType = "password";
+            }
+            let new_setting_html = "<tr><td>" + name + "</td><td><div class=control><input autocomplete=off class=input id=settings_" + name + " type=\"" + inputType + "\" value=\"" + value + "\"></div></td><td style=\"text-align:center\"><a href=\"javascript:deleteSetting('" + name + "');\">&#10060;</a></td>";
+            document.getElementsByTagName("tbody")[0].innerHTML += new_setting_html;
+        }
+        function deleteSetting(name) {
+            document.getElementById("settings_" + name).parentElement.parentElement.parentElement.remove();
+        }
+        async function saveSettings() {
+            let data = {};
+            let fields = document.querySelectorAll("[id^=settings_]")
+            for (var i = 0; i < fields.length; i++) {
+                data[fields[i].id.split("settings_")[1]] = fields[i].value;
+            }
+            const request = new Request("/save/settings", {
+                headers: { "Content-Type": "application/json" },
+                method: "POST",
+                body: JSON.stringify(data)
+            });
+            const response = await fetch(request);
+            manageSettings();
         }
         async function confirmDeleteUser(user, id) {
             if (confirm("Are you sure you want to delete '" + user + "' ?")) {

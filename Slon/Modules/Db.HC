@@ -107,6 +107,13 @@ U0 @slon_db_load_markers_from_disk()
     db->set("markers", markers, JSON_OBJECT);
 }
 
+U0 @slon_db_load_settings_from_disk()
+{
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/settings.json", SLON_DB_PATH);
+    db->set("settings", Json.ParseFile(scratch_buffer), JSON_OBJECT);
+}
+
 U0 @slon_db_load_statuses_from_disk()
 {
     JsonObject* statuses = Json.CreateObject();
@@ -228,6 +235,13 @@ U0 @slon_db_save_markers_to_disk()
     }
 }
 
+U0 @slon_db_save_settings_to_disk()
+{
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/settings.json", SLON_DB_PATH);
+    Json.DumpToFile(scratch_buffer, db->o("settings"));
+}
+
 U0 @slon_db_save_statuses_to_disk()
 {
     U8 scratch_buffer[256];
@@ -263,6 +277,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_markers_to_disk();
     @slon_db_save_oauth_to_disk();
     @slon_db_save_private_keys_to_disk();
+    @slon_db_save_settings_to_disk();
     @slon_db_save_statuses_to_disk();
     @slon_db_save_timelines_to_disk();
 }
@@ -281,6 +296,7 @@ U0 @slon_db_load_from_defaults()
     db->set("instance", Json.ParseFile("M:/Slon/Static/defaults/instance.json"), JSON_OBJECT);
     db->set("markers", Json.CreateObject(), JSON_OBJECT);
     db->set("media", Json.CreateObject(), JSON_OBJECT);
+    db->set("settings", Json.CreateObject(), JSON_OBJECT);
     db->set("statuses", Json.CreateObject(), JSON_OBJECT);
     db->set("timelines", Json.CreateObject(), JSON_OBJECT);
     db->o("timelines")->set("home", Json.CreateObject(), JSON_OBJECT);
@@ -309,6 +325,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_markers_from_disk();
     db->set("media", Json.CreateObject(), JSON_OBJECT);
     @slon_db_load_oauth_from_disk();
+    @slon_db_load_settings_from_disk();
     @slon_db_load_statuses_from_disk();
     @slon_db_load_timelines_from_disk();
     db->set("setup", TRUE, JSON_BOOLEAN);
