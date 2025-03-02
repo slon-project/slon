@@ -75,6 +75,23 @@ JsonObject* @slon_api_v1_statuses_lookup_by_id(U8* id, JsonArray* statuses)
     return NULL;
 }
 
+JsonArray* @slon_api_v1_statuses_lookup_descendants_by_id(U8* id, JsonArray* statuses)
+{
+    if (!id || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonArray* arr = Json.CreateArray();
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (status->@("in_reply_to_id") && !StrICmp(status->@("in_reply_to_id"), id)) {
+            arr->append(Json.CreateItem(status, JSON_OBJECT));
+        }
+    }
+    return arr;
+}
+
 JsonObject* @slon_api_v1_statuses_find_by_id(U8* id, U8* account_id)
 {
     if (!id || !account_id) {
@@ -97,6 +114,30 @@ JsonObject* @slon_api_v1_statuses_find_by_id(U8* id, U8* account_id)
         return status;
     }
     return NULL;
+}
+
+JsonArray* @slon_api_v1_statuses_find_descendants_by_id(U8* id, U8* account_id)
+{
+    if (!id || !account_id) {
+        return NULL;
+    }
+    JsonArray* arr = NULL;
+    // Lookup in public timeline
+    arr = @slon_api_v1_statuses_lookup_descendants_by_id(id, db->o("timelines")->a("public"));
+    if (arr && arr->length) {
+        return arr;
+    }
+    // Then, lookup in home timeline
+    arr = @slon_api_v1_statuses_lookup_descendants_by_id(id, db->o("timelines")->o("home")->a(account_id));
+    if (arr && arr->length) {
+        return arr;
+    }
+    // Finally, lookup in account's statuses
+    arr = @slon_api_v1_statuses_lookup_descendants_by_id(id, db->o("statuses")->a(account_id));
+    if (arr && arr->length) {
+        return arr;
+    }
+    return SLON_EMPTY_JSON_ARRAY;
 }
 
 U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array)
@@ -253,7 +294,6 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
             JsonObject* context = Json.CreateObject();
             context->set("ancestors", Json.CreateArray(), JSON_ARRAY);
-            context->set("descendants", Json.CreateArray(), JSON_ARRAY);
 
             // Get ancestors
             id = session->path(3);
@@ -266,7 +306,9 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
                 }
             }
 
-            // FIXME: Get descendants
+            // Get descendants
+            id = session->path(3);
+            context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(id, account_id), JSON_ARRAY);
 
             session->send(context);
             return;
