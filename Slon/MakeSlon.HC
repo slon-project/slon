@@ -19,12 +19,14 @@ WinMax(Fs);
 #include "Api/V1/FollowRequests";
 #include "Api/V1/FollowedTags";
 #include "Api/V1/Markers";
+#include "Api/V1/Media";
 #include "Api/V1/Notifications";
 #include "Api/V1/Statuses";
 #include "Api/V1/Timelines";
 
 #include "Api/V2/Filters";
 #include "Api/V2/Instance";
+#include "Api/V2/Media";
 #include "Api/V2/Search";
 #include "Api/V2/Suggestions";
 

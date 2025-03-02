@@ -256,6 +256,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         // IceCubesApp lets us post with +:         media_attachments, replies_count, spoiler_text, sensitive
 
         JsonObject* status = Json.CreateObject();
+        JsonArray* media_attachments = NULL;
         status->set("id", id, JSON_STRING);
         status->set("created_at", created_at, JSON_STRING);
         status->set("content", request_json->@("status"), JSON_STRING);
@@ -269,7 +270,19 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         status->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
         status->set("tags", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
         status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
-        status->set("media_attachments", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        if (request_json->@("media_ids") && request_json->a("media_ids")->length) {
+            I64 i;
+            media_attachments = Json.CreateArray();
+            for (i = 0; i < request_json->a("media_ids")->length; i++) {
+                U8* media_id = request_json->a("media_ids")->@(i);
+                if (media_id && db->o("media")->o(media_id)) {
+                    media_attachments->append(Json.CreateItem(db->o("media")->o(media_id), JSON_OBJECT));
+                }
+            }
+            status->set("media_attachments", media_attachments, JSON_ARRAY);
+        } else {
+            status->set("media_attachments", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        }
         status->set("replies_count", 0, JSON_NUMBER);
         status->set("spoiler_text", "", JSON_STRING);
         status->set("sensitive", sensitive, JSON_BOOLEAN);
@@ -292,6 +305,9 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
 
         session->send(status);
 
+        if (media_attachments) {
+            Json.Delete(media_attachments);
+        }
         Json.Delete(status_app);
         Json.Delete(account_object);
         Json.Delete(app_object);

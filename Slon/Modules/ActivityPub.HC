@@ -433,6 +433,8 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
 U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
 {
     Sleep(1000);
+    I64 i;
+
     U8 scratch_buffer[2048];
 
     U8* this_actor = StrNew(status->@("uri"), adam_task);
@@ -466,7 +468,6 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
         // lookup status uri in user's home timeline
         JsonArray* lookup_array = db->o("timelines")->o("home")->a(status->o("account")->@("id"));
         if (lookup_array) {
-            I64 i;
             for (i = 0; i < lookup_array->length; i++) {
                 if (!StrICmp(status->@("in_reply_to_id"), lookup_array->o(i)->@("id"))) {
                     note_object->set("inReplyTo", lookup_array->o(i)->@("uri"), JSON_STRING);
@@ -483,7 +484,26 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     JsonObject* content_map = Json.CreateObject();
     content_map->set("en", status->@("content"), JSON_STRING);
     note_object->set("contentMap", content_map, JSON_OBJECT);
-    note_object->set("attachment", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    JsonArray* attachment_array = NULL;
+    if (status->@("media_attachments") && status->a("media_attachments")->length) {
+        attachment_array = Json.CreateArray();
+        JsonArray* media_attachments = status->a("media_attachments");
+        JsonObject* masto_attachment = NULL;
+        JsonObject* ap_attachment = NULL;
+        for (i = 0; i < media_attachments->length; i++) {
+            masto_attachment = media_attachments->@(i);
+            ap_attachment = Json.CreateObject();
+            StrPrint(scratch_buffer, "image/%s", StrFind(".", StrFind("/images/", masto_attachment->@("url")) + 8) + 1);
+            ap_attachment->set("mediaType", scratch_buffer, JSON_STRING);
+            ap_attachment->set("url", masto_attachment->@("url"), JSON_STRING);
+            ap_attachment->set("width", masto_attachment->o("meta")->o("original")->@("width"), JSON_NUMBER);
+            ap_attachment->set("height", masto_attachment->o("meta")->o("original")->@("height"), JSON_NUMBER);
+            attachment_array->append(Json.CreateItem(ap_attachment, JSON_OBJECT));
+        }
+        note_object->set("attachment", attachment_array, JSON_ARRAY);
+    } else {
+        note_object->set("attachment", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    }
     note_object->set("tag", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
     note_object->set("replies", SLON_EMPTY_JSON_OBJECT, JSON_OBJECT);
     note_object->set("likes", SLON_EMPTY_JSON_OBJECT, JSON_OBJECT);
@@ -494,6 +514,9 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     StrPrint(scratch_buffer, "%s/inbox", dest);
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, create_object);
     Free(fetch_buffer);
+    if (attachment_array) {
+        Json.Delete(attachment_array);
+    }
     Json.Delete(create_object);
 }
 

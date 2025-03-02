@@ -1,6 +1,7 @@
 #define SLON_MISSING_ACCOUNT_AVATAR "https://slon-project.org/images/avatar-missing.png"
 
 #define SLON_DB_PATH "A:/db"
+#define SLON_MEDIA_PATH "B:/media"
 
 JsonObject* db = Json.CreateObject();
 
@@ -279,6 +280,7 @@ U0 @slon_db_load_from_defaults()
     db->set("following", Json.CreateObject(), JSON_OBJECT);
     db->set("instance", Json.ParseFile("M:/Slon/Static/defaults/instance.json"), JSON_OBJECT);
     db->set("markers", Json.CreateObject(), JSON_OBJECT);
+    db->set("media", Json.CreateObject(), JSON_OBJECT);
     db->set("statuses", Json.CreateObject(), JSON_OBJECT);
     db->set("timelines", Json.CreateObject(), JSON_OBJECT);
     db->o("timelines")->set("home", Json.CreateObject(), JSON_OBJECT);
@@ -305,6 +307,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_following_from_disk();
     @slon_db_load_instance_from_disk();
     @slon_db_load_markers_from_disk();
+    db->set("media", Json.CreateObject(), JSON_OBJECT);
     @slon_db_load_oauth_from_disk();
     @slon_db_load_statuses_from_disk();
     @slon_db_load_timelines_from_disk();

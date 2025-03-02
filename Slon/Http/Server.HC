@@ -482,6 +482,11 @@ U0 @slon_http_parse_request_as_form_urlencoded(SlonHttpSession* session)
 
 U0 @slon_http_parse_request_as_multipart_form_data(SlonHttpSession* session)
 {
+    if (StrFind("; filename=", session->request->data)) {
+        // Skip parsing - this is a media upload
+        session->request->json = Json.Parse("{}");
+        return;
+    }
     U8* json_string = @slon_http_json_string_from_multipart_form_data(session, session->request->data);
     session->request->json = Json.Parse(json_string);
     @slon_free(session, json_string);
@@ -589,8 +594,32 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
     #include "Endpoints/Post/ActivityPub";
     #include "Endpoints/Post/Apps";
     #include "Endpoints/Post/Markers";
+    #include "Endpoints/Post/Media";
     #include "Endpoints/Post/OAuth";
     #include "Endpoints/Post/Statuses";
+
+    /* clang-format on */
+
+    session->status(404);
+}
+
+U0 @slon_http_handle_put_request(SlonHttpSession* session)
+{
+    if (StrFind("json", session->header("content-type")) > 0) {
+        @slon_http_parse_request_as_json(session);
+    }
+    if (String.BeginsWith("application/x-www-form-urlencoded", session->header("content-type"))) {
+        @slon_http_parse_request_as_form_urlencoded(session);
+    }
+    if (String.BeginsWith("multipart/form-data", session->header("content-type"))) {
+        @slon_http_parse_request_as_multipart_form_data(session);
+    }
+
+    SLON_DEBUG_PRINT_REQUEST_JSON
+
+    /* clang-format off */
+
+    #include "Endpoints/Put/Media";
 
     /* clang-format on */
 
@@ -617,6 +646,9 @@ U0 @slon_http_handle_request(SlonHttpSession* session)
         break;
     case SLON_HTTP_VERB_POST:
         @slon_http_handle_post_request(session);
+        break;
+    case SLON_HTTP_VERB_PUT:
+        @slon_http_handle_put_request(session);
         break;
     default:
         session->status(405);
