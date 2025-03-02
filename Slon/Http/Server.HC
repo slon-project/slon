@@ -392,10 +392,9 @@ JsonObject* @slon_http_json_object_from_form_urlencoded_string(SlonHttpSession* 
     return obj;
 }
 
-U8* @slon_http_json_string_from_multipart_form_data(SlonHttpSession* session, U8* multipart_form_data)
+JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* session, U8* multipart_form_data)
 {
-    U8* json_string = @slon_calloc(session, StrLen(multipart_form_data) * 2);
-    String.Append(json_string, "{");
+    JsonObject* obj = Json.CreateObject();
     U8* multipart_form_data_copy = @slon_strnew(session, multipart_form_data);
 
     U8* boundary = StrFind("boundary=", session->header("content-type")) + 9;
@@ -412,7 +411,8 @@ U8* @slon_http_json_string_from_multipart_form_data(SlonHttpSession* session, U8
 
     U8* line;
     U8* name;
-    U8* replace_line;
+    U8* value = @slon_calloc(session, 262144);
+    U8* sub_key = NULL;
 
     I64 i = 0;
     while (i < lines_count) {
@@ -435,23 +435,41 @@ U8* @slon_http_json_string_from_multipart_form_data(SlonHttpSession* session, U8
                     name++;
                 while (name[StrLen(name) - 1] == '\"')
                     name[StrLen(name) - 1] = NULL;
-                String.Append(json_string, "\"%s\":\"", name);
+                StrCpy(value, "");
                 state = SLON_MULTIPART_PARSER_CONSUME_CONTENT;
             }
             break;
         case SLON_MULTIPART_PARSER_CONSUME_CONTENT:
             if (StrFind(boundary, line)) {
-                String.Append(json_string, "\"");
+                if (String.EndsWith("[]", name)) {
+                    // We have an array
+                    StrFind("[]", name)[0] = NULL;
+                    if (!obj->@(name)) {
+                        obj->set(name, Json.CreateArray(), JSON_ARRAY);
+                    }
+                    obj->a(name)->append(Json.CreateItem(value, JSON_STRING));
+                } else if (StrFind("[", name) > 0) {
+                    // We have an object
+                    sub_key = StrFind("[", name) + 1;
+                    while (sub_key[StrLen(sub_key) - 1] == ']') {
+                        sub_key[StrLen(sub_key) - 1] = NULL;
+                    }
+                    StrFind("[", name)[0] = NULL;
+                    if (!obj->@(name)) {
+                        obj->set(name, Json.CreateObject(), JSON_OBJECT);
+                    }
+                    obj->o(name)->set(sub_key, value, JSON_STRING);
+                } else {
+                    // We have a boring old parameter
+                    obj->set(name, value, JSON_STRING);
+                }
                 if (!String.EndsWith("--", line)) {
-                    String.Append(json_string, ",");
                     state = SLON_MULTIPART_PARSER_CONSUME_CONTENT_DISPOSITION;
                 } else {
                     state = SLON_MULTIPART_PARSER_DONE;
                 }
             } else {
-                replace_line = String.Replace(line, "\"", "\\\"");
-                String.Append(json_string, replace_line);
-                Free(replace_line);
+                String.Append(value, line);
             }
             break;
         default:
@@ -459,9 +477,10 @@ U8* @slon_http_json_string_from_multipart_form_data(SlonHttpSession* session, U8
         }
         ++i;
     }
-    String.Append(json_string, "}");
+
+    @slon_free(session, value);
     @slon_free(session, multipart_form_data_copy);
-    return json_string;
+    return obj;
 }
 
 U0 @slon_http_parse_query_string(SlonHttpSession* session)
@@ -487,9 +506,7 @@ U0 @slon_http_parse_request_as_multipart_form_data(SlonHttpSession* session)
         session->request->json = Json.Parse("{}");
         return;
     }
-    U8* json_string = @slon_http_json_string_from_multipart_form_data(session, session->request->data);
-    session->request->json = Json.Parse(json_string);
-    @slon_free(session, json_string);
+    session->request->json = @slon_http_json_object_from_multipart_form_data(session, session->request->data);
 }
 
 U0 @slon_http_parse_request_as_json(SlonHttpSession* session)
