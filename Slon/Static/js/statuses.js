@@ -23,7 +23,7 @@ function updateStatusContainers() {
         let desc = "Term";
 
         for (var y = 0; y < height; y++) {
-            let ch = y < 4 ? desc[y] : "\u2551"; 
+            let ch = y < 4 ? desc[y] : "\u2551";
             post_html += "<b>" + ch + "<div style=\"display: inline-block; height: 16px; width: " + ((horizontal_fill_count + 1) * 16).toString() + "px\"></div>\u2551</b><br>";
         }
 
@@ -38,7 +38,7 @@ function updateStatusContainers() {
     }
 }
 
-function smolDate(a){return a.split(" ago")[0].replace("a ","1").replace("an ","1").replace("days","d").replace("day","d").replace("hours","h").replace("hour","h").replace("minutes","m").replace("minute","m").replace("seconds","s").replace("second","s").replace("few","").replace(" ","")};
+function smolDate(a) { return a.split(" ago")[0].replace("a ", "1").replace("an ", "1").replace("days", "d").replace("day", "d").replace("hours", "h").replace("hour", "h").replace("minutes", "m").replace("minute", "m").replace("seconds", "s").replace("second", "s").replace("few", "").replace(" ", "") };
 
 function updateStatuses(user, statuses) {
     let pageContent = document.getElementsByClassName("page-content")[0];
@@ -54,7 +54,7 @@ function updateStatuses(user, statuses) {
         content_html += "<div class=status-avatar style=margin:16px;background:url(" + user["icon"]["url"] + ");width:72px;height:72px;background-size:contain;background-repeat:no-repeat></div>";
         content_html += "<div class=status-header>" + user["preferredUsername"] + "<br><a href=" + user["url"] + ">@" + user["preferredUsername"] + "@" + location.host + "</a></div>"
         content_html += "<div class=status-text><font style=color:#0>" + user["summary"] + "</font></div>";
-        content_html += "<div class=status-text>Joined " + new Date(Date.parse(user["published"])).toString().substr(0,15) + "</div>";
+        content_html += "<div class=status-text>Joined " + new Date(Date.parse(user["published"])).toString().substr(0, 15) + "</div>";
         content.innerHTML = content_html;
         let url = document.createElement('url');
         url.textContent = window.location;
@@ -66,11 +66,11 @@ function updateStatuses(user, statuses) {
         elements.appendChild(container);
         let spacer = document.createElement('div');
         spacer.style.height = "16px";
-        elements.appendChild(spacer);    
+        elements.appendChild(spacer);
     }
-    
+
     elements.className = "statuses";
-    statuses.sort((a,b) => b.id - a.id);
+    statuses.sort((a, b) => b.id - a.id);
     for (var i = 0; i < statuses.length; i++) {
         let status = statuses[i];
         let container = document.createElement('div');
@@ -131,8 +131,17 @@ function updateStatuses(user, statuses) {
 function getStatuses(user) {
     fetch("https://error.checksum.fail/api/v1/accounts/" + user["accountId"] + "/statuses", {
         method: 'GET',
-        headers: {'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json' }
     })
-    .then(response => response.json())
-    .then(data => updateStatuses(user, data));            
+        .then(response => response.json())
+        .then(data => updateStatuses(user, data));
+}
+
+function getStatusById(id, user) {
+    fetch("https://error.checksum.fail/api/v1/statuses/" + id, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+    })
+        .then(response => response.json())
+        .then(data => updateStatuses(user, [data]));
 }

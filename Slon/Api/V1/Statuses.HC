@@ -94,7 +94,7 @@ JsonArray* @slon_api_v1_statuses_lookup_descendants_by_id(U8* id, JsonArray* sta
 
 JsonObject* @slon_api_v1_statuses_find_by_id(U8* id, U8* account_id)
 {
-    if (!id || !account_id) {
+    if (!id) {
         return NULL;
     }
     JsonObject* status = NULL;
@@ -102,6 +102,9 @@ JsonObject* @slon_api_v1_statuses_find_by_id(U8* id, U8* account_id)
     status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->a("public"));
     if (status) {
         return status;
+    }
+    if (!account_id) {
+        return NULL;
     }
     // Then, lookup in home timeline
     status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
@@ -274,22 +277,23 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
 
 U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
 {
+
+    if (session->path_count() < 4) {
+        session->status(400);
+        return;
+    }
+
+    if (session->path_count() > 4 && !StrICmp("history", session->path(4))) {
+        // NOTE: We probably won't support this any time soon
+        session->send(SLON_EMPTY_JSON_ARRAY);
+        return;
+    }
+
+    U8* id = session->path(3);
+    JsonObject* status = NULL;
+
     if (@slon_api_authorized(session)) {
         SLON_AUTH_ACCOUNT_ID
-
-        if (session->path_count() < 4) {
-            session->status(400);
-            return;
-        }
-
-        if (session->path_count() > 4 && !StrICmp("history", session->path(4))) {
-            // NOTE: We probably won't support this any time soon
-            session->send(SLON_EMPTY_JSON_ARRAY);
-            return;
-        }
-
-        U8* id = session->path(3);
-        JsonObject* status = NULL;
 
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
             JsonObject* context = Json.CreateObject();
@@ -321,7 +325,12 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
         }
         session->status(404);
     } else {
-        session->status(401);
+        status = @slon_api_v1_statuses_find_by_id(id, NULL);
+        if (status) {
+            session->send(status);
+            return;
+        }
+        session->status(404);
     }
 }
 
