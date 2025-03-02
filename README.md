@@ -9,6 +9,8 @@ Slon is developed to run from a standard TempleOS installation, or directly from
 
 Slon includes its own Virtio net and block device drivers, TCP/IPv4 network stack, and various supplemental libraries, all loaded at runtime, making it suitable for QEMU/KVM based cloud environments.
 
+Image uploads powered by [Catbox](https://catbox.moe) (Support Catbox: [Patreon](https://patreon.com/catbox) | [Ko-fi](https://ko-fi.com/catboxmoe) | [Merch](https://store.catbox.moe))
+
 Slon utilizes the following third-party libraries:
 
 - [`stb_image.h`](https://github.com/nothings/stb/blob/master/stb_image.h) and [`stb_image_write.h`](https://github.com/nothings/stb/blob/master/stb_image_write.h) (for optional image processing)

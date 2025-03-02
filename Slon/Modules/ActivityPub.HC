@@ -493,7 +493,7 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
         for (i = 0; i < media_attachments->length; i++) {
             masto_attachment = media_attachments->@(i);
             ap_attachment = Json.CreateObject();
-            StrPrint(scratch_buffer, "image/%s", StrFind(".", StrFind("/images/", masto_attachment->@("url")) + 8) + 1);
+            StrPrint(scratch_buffer, "image/%s", StrFind(".", StrFind("catbox.moe/", masto_attachment->@("url")) + 11) + 1);
             ap_attachment->set("mediaType", scratch_buffer, JSON_STRING);
             ap_attachment->set("url", masto_attachment->@("url"), JSON_STRING);
             ap_attachment->set("width", masto_attachment->o("meta")->o("original")->@("width"), JSON_NUMBER);
