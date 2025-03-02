@@ -239,6 +239,9 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         U8* username = account_object->@("username");
 
         Bool sensitive = request_json->@("sensitive") > 0;
+        if (request_json->@("sensitive", TRUE)(JsonKey*)->type == JSON_STRING) {
+            sensitive = (!StrICmp("true", request_json->@("sensitive")));
+        }
         U8* in_reply_to_id = request_json->@("in_reply_to_id");
         U8* visibility = request_json->@("visibility");
 
