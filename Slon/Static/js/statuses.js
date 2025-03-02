@@ -82,7 +82,13 @@ function updateStatuses(user, statuses) {
             content_html += "<span title=Public>&#127758;</span> ";
         }
         content_html += "<span class=status-timestamp>" + smolDate(dayjs(status["created_at"]).fromNow()) + "</span><br></div>";
-        content_html += "<div class=status-text>" + status["content"] + "</div>";
+        content_html += "<div class=status-text>" + status["content"];
+        if (!!status["media_attachments"] && status["media_attachments"].length) {
+            for (var x = 0; x < status["media_attachments"].length; x++) {
+                content_html += "<img class=img-media src=\"" + status["media_attachments"][x]["url"] + "\"></div>";
+            }
+        }
+        content_html += "</div>";
         content_html += "<span class=status-counts>&#128172; " + status["replies_count"] + " &#128257; " + status["reblogs_count"] + " &#11088; " + status["favourites_count"] + "</span>";
         content_html += "<div class=status-footer>via <a href=" + status["application"]["website"] + ">" + status["application"]["name"] + "</a></div>";
         content.innerHTML = content_html;
@@ -119,7 +125,7 @@ function updateStatuses(user, statuses) {
     }
     pageContent.innerHTML = "";
     pageContent.appendChild(elements);
-    updateStatusContainers();
+    window.onload = updateStatusContainers();
 }
 
 function getStatuses(user) {

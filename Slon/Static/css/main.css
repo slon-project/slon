@@ -24,6 +24,9 @@ a {
     color: #800;
     text-decoration-thickness: 2px;
 }
+.img-media {
+    max-width: 640px;
+}
 .page-container {
     width: 800px;
     margin: auto;
