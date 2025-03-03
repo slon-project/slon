@@ -132,14 +132,14 @@ Bool @string_trim_ch(U8 s_ch, U8 trim_ch)
 U0 @string_trim(U8* s, U8 ch = NULL, I64 mode = TRIM_BOTH)
 {
     Bool trim_ch = @string_trim_ch(*s, ch);
-    if (TRIM_BOTH || TRIM_LEFT) {
+    if (mode == TRIM_BOTH || mode == TRIM_LEFT) {
         while (trim_ch) {
             StrCpy(s, s + 1);
             trim_ch = @string_trim_ch(*s, ch);
         }
     }
     trim_ch = @string_trim_ch(s[StrLen(s) - 1], ch);
-    if (TRIM_BOTH || TRIM_RIGHT) {
+    if (mode == TRIM_BOTH || mode == TRIM_RIGHT) {
         while (trim_ch) {
             s[StrLen(s) - 1] = NULL;
             trim_ch = @string_trim_ch(s[StrLen(s) - 1], ch);
