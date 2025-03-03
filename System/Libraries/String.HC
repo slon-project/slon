@@ -1,3 +1,7 @@
+#define TRIM_BOTH 0
+#define TRIM_LEFT 1
+#define TRIM_RIGHT 2
+
 U0 @string_append(U8* dst, U8* fmt, ...)
 {
     U8* buf;
@@ -113,6 +117,36 @@ U8** @string_split(U8* s, U8 ch = '\n', I64* cnt)
     return arr;
 }
 
+Bool @string_trim_ch(U8 s_ch, U8 trim_ch)
+{
+    if (!s_ch) {
+        return FALSE;
+    }
+    if (!trim_ch) {
+        return (s_ch == ' ' || s_ch == '\r' || s_ch == '\n' || s_ch == '\t');
+    } else {
+        return (s_ch == trim_ch);
+    }
+}
+
+U0 @string_trim(U8* s, U8 ch = NULL, I64 mode = TRIM_BOTH)
+{
+    Bool trim_ch = @string_trim_ch(*s, ch);
+    if (TRIM_BOTH || TRIM_LEFT) {
+        while (trim_ch) {
+            StrCpy(s, s + 1);
+            trim_ch = @string_trim_ch(*s, ch);
+        }
+    }
+    trim_ch = @string_trim_ch(s[StrLen(s) - 1], ch);
+    if (TRIM_BOTH || TRIM_RIGHT) {
+        while (trim_ch) {
+            s[StrLen(s) - 1] = NULL;
+            trim_ch = @string_trim_ch(s[StrLen(s) - 1], ch);
+        }
+    }
+}
+
 class @string
 {
     U0(*Append)
@@ -122,6 +156,7 @@ class @string
     Bool (*IsNumber)(U8* s);
     U8* (*Replace)(U8* s, U8* oldW, U8* newW);
     U8** (*Split)(U8* s, U8 ch = '\n', I64 * cnt);
+    U0 (*Trim)(U8* s, U8 ch = NULL, I64 mode = TRIM_BOTH);
 };
 
 @string String;
@@ -131,3 +166,4 @@ String.EndsWith = &@string_ends_with;
 String.IsNumber = &@string_is_number;
 String.Replace = &@string_replace;
 String.Split = &@string_split;
+String.Trim = &@string_trim;
