@@ -11,6 +11,8 @@ Slon includes its own Virtio net and block device drivers, TCP/IPv4 network stac
 
 Image uploads powered by [Catbox](https://catbox.moe) (Support Catbox: [Patreon](https://patreon.com/catbox) | [Ko-fi](https://ko-fi.com/catboxmoe) | [Merch](https://store.catbox.moe))
 
+https://github.com/user-attachments/assets/9a220af9-3c4a-4fbc-b49d-0dfe4482cd1d
+
 Slon utilizes the following third-party libraries:
 
 - [`stb_image.h`](https://github.com/nothings/stb/blob/master/stb_image.h) and [`stb_image_write.h`](https://github.com/nothings/stb/blob/master/stb_image_write.h) (for optional image processing)
@@ -19,7 +21,7 @@ Slon utilizes the following third-party libraries:
 
 Slon has a default theme for web view that mimics the TempleOS WinMgr, using emoji from the [SerenityOS](https://serenityos.org) project (https://emoji.serenityos.org):
 
-![slon-web-preview](https://slon-project.org/images/slon-web-preview.gif)
+![slon-web-preview](https://github.com/user-attachments/assets/5cb706f5-6bac-4fa8-8a4d-c445611a97b2)
 
 Slon is intended to be deployed as a single-user (or, handful-of-users) instance. 
 
