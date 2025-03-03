@@ -85,7 +85,8 @@ function updateStatuses(user, statuses) {
         content_html += "<div class=status-text>" + status["content"];
         if (!!status["media_attachments"] && status["media_attachments"].length) {
             for (var x = 0; x < status["media_attachments"].length; x++) {
-                content_html += "<img class=img-media src=\"" + status["media_attachments"][x]["url"] + "\"></div>";
+                let original = status["media_attachments"][x]["meta"]["original"];
+                content_html += "<img width=" + original["width"] + " height=" + original["height"] + " class=img-media src=\"" + status["media_attachments"][x]["url"] + "\"></div>";
             }
         }
         content_html += "</div>";
@@ -125,7 +126,7 @@ function updateStatuses(user, statuses) {
     }
     pageContent.innerHTML = "";
     pageContent.appendChild(elements);
-    window.onload = updateStatusContainers();
+    updateStatusContainers();
 }
 
 function getStatuses(user) {
