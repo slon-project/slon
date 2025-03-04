@@ -3,6 +3,11 @@
 
 extern @http_response* @slon_activitypub_signed_request(U8* url_string, U8* fetch_buffer, JsonObject* request_object = NULL, I64 verb = SLON_HTTP_VERB_POST, U8* signatory = NULL);
 
+class SlonCatboxUpload {
+    JsonKey* key;
+    U8* filepath;
+};
+
 Bool @slon_api_authorized(SlonHttpSession* session)
 {
     return session->auth > 0;
@@ -115,19 +120,24 @@ JsonObject* @slon_api_account_by_remote_actor(U8* remote_actor)
     return NULL;
 }
 
-U8* @slon_api_upload_to_catbox(SlonHttpSession* session, U8* filepath)
+U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
 {
-    if (!session || !filepath) {
-        return NULL;
+    if (!cb) {
+        return;
     }
+    if (!cb->key || !cb->filepath || !FileFind(cb->filepath)) {
+        Free(cb);
+        return;
+    }
+
+    U8* filepath = cb->filepath;
 
     I64 data_size = 0;
     U8* data = FileRead(filepath, &data_size);
-    U8* image_url = NULL;
 
     // build the multipart/form-data payload
 
-    U8* payload = @slon_calloc(session, 4096 + data_size);
+    U8* payload = CAlloc(4096 + data_size, adam_task);
     I64 payload_size = 0;
 
     U8* boundary = "----------SlonFormBoundary00";
@@ -137,12 +147,16 @@ U8* @slon_api_upload_to_catbox(SlonHttpSession* session, U8* filepath)
     if (db->o("settings")->@("catbox_userhash")) {
         String.Append(payload, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n--%s\r\n", "userhash", db->o("settings")->@("catbox_userhash"), boundary);
     }
-    U8* random_filename = @slon_api_generate_unique_id(session);
+
+    U8 random_filename[64];
+    U64 id = ((CDate2Unix(Now) + SLON_API_LOCAL_TIME_OFFSET) * 1000) << 16;
+    id += RandU64 & 0xffff;
+    StrPrint(random_filename, "%d", id);
+
     U8* ext = StrFind(".", filepath) + 1;
     String.Append(payload, "Content-Disposition: form-data; name=\"fileToUpload\"; filename=\"%s.%s\"\r\n", random_filename, ext);
     String.Append(payload, "Content-Type: image/%s\r\n\r\n", ext);
     payload_size = StrLen(payload);
-    @slon_free(session, random_filename);
 
     MemCpy(payload + payload_size, data, data_size);
     payload_size += data_size;
@@ -151,7 +165,7 @@ U8* @slon_api_upload_to_catbox(SlonHttpSession* session, U8* filepath)
     payload_size += StrLen(boundary);
 
     // build the http headers
-    U8* headers = @slon_calloc(session, 4096);
+    U8* headers = CAlloc(4096, adam_task);
     String.Append(headers, "POST /user/api.php HTTP/1.1\r\n");
     String.Append(headers, "Host: catbox.moe\r\n");
     String.Append(headers, "User-Agent: slon/1.0\r\n");
@@ -159,7 +173,7 @@ U8* @slon_api_upload_to_catbox(SlonHttpSession* session, U8* filepath)
     String.Append(headers, "Content-Type: multipart/form-data; boundary=%s\r\n\r\n", boundary);
 
     I64 send_buffer_size = StrLen(headers) + payload_size;
-    U8* send_buffer = @slon_calloc(session, send_buffer_size);
+    U8* send_buffer = CAlloc(send_buffer_size, adam_task);
 
     MemCpy(send_buffer, headers, StrLen(headers));
     MemCpy(send_buffer + StrLen(headers), payload, payload_size);
@@ -183,7 +197,7 @@ U8* @slon_api_upload_to_catbox(SlonHttpSession* session, U8* filepath)
 
     I64 bytes_received = 0;
     I64 response_buffer_size = 0;
-    U8* response_buffer = @slon_calloc(session, 4096);
+    U8* response_buffer = CAlloc(4096, adam_task);
 
     while (!bytes_received) {
         bytes_received = s->receive(response_buffer + response_buffer_size, 4096);
@@ -199,28 +213,30 @@ U8* @slon_api_upload_to_catbox(SlonHttpSession* session, U8* filepath)
     url_ptr = StrFind("\r\n", url_ptr) + 2;
     StrFind("\r\n", url_ptr)[0] = NULL;
 
-    image_url = @slon_strnew(session, url_ptr);
+    cb->key->value = StrNew(url_ptr, adam_task);
+    cb->key->type = JSON_STRING;
 
 slon_api_upload_to_catbox_failed:
 
-    @slon_free(session, response_buffer);
-    @slon_free(session, send_buffer);
-    @slon_free(session, headers);
-    @slon_free(session, payload);
+    Free(response_buffer);
+    Free(send_buffer);
+    Free(headers);
+    Free(payload);
     Free(data);
-
-    return image_url;
+    Del(cb->filepath);
+    Free(cb->filepath);
+    Free(cb);
 }
 
-U0 @slon_api_delete_from_catbox(SlonHttpSession* session, U8* filename)
+U0 @slon_api_async_delete_from_catbox(U8* filename)
 {
-    if (!session || !filename) {
+    if (!filename) {
         return;
     }
 
     // build the multipart/form-data payload
 
-    U8* payload = @slon_calloc(session, 4096);
+    U8* payload = CAlloc(4096, adam_task);
     I64 payload_size = 0;
 
     U8* boundary = "----------SlonFormBoundary00";
@@ -234,7 +250,7 @@ U0 @slon_api_delete_from_catbox(SlonHttpSession* session, U8* filename)
     payload_size = StrLen(payload);
 
     // build the http headers
-    U8* headers = @slon_calloc(session, 4096);
+    U8* headers = CAlloc(4096, adam_task);
     String.Append(headers, "POST /user/api.php HTTP/1.1\r\n");
     String.Append(headers, "Host: catbox.moe\r\n");
     String.Append(headers, "User-Agent: slon/1.0\r\n");
@@ -242,7 +258,7 @@ U0 @slon_api_delete_from_catbox(SlonHttpSession* session, U8* filename)
     String.Append(headers, "Content-Type: multipart/form-data; boundary=%s\r\n\r\n", boundary);
 
     I64 send_buffer_size = StrLen(headers) + payload_size;
-    U8* send_buffer = @slon_calloc(session, send_buffer_size);
+    U8* send_buffer = CAlloc(send_buffer_size, adam_task);
 
     MemCpy(send_buffer, headers, StrLen(headers));
     MemCpy(send_buffer + StrLen(headers), payload, payload_size);
@@ -255,7 +271,7 @@ U0 @slon_api_delete_from_catbox(SlonHttpSession* session, U8* filename)
 
     I64 bytes_received = 0;
     I64 response_buffer_size = 0;
-    U8* response_buffer = @slon_calloc(session, 4096);
+    U8* response_buffer = CAlloc(4096, adam_task);
 
     while (!bytes_received) {
         bytes_received = s->receive(response_buffer + response_buffer_size, 4096);
@@ -264,8 +280,9 @@ U0 @slon_api_delete_from_catbox(SlonHttpSession* session, U8* filename)
 
     s->close();
 
-    @slon_free(session, response_buffer);
-    @slon_free(session, send_buffer);
-    @slon_free(session, payload);
-    @slon_free(session, headers);
+    Free(response_buffer);
+    Free(send_buffer);
+    Free(payload);
+    Free(headers);
+    Free(filename);
 }

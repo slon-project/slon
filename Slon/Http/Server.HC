@@ -692,6 +692,7 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
     #include "Endpoints/Get/FollowedTags";
     #include "Endpoints/Get/Instance";
     #include "Endpoints/Get/Markers";
+    #include "Endpoints/Get/Media";
     #include "Endpoints/Get/Notifications";
     #include "Endpoints/Get/NodeInfo";
     #include "Endpoints/Get/OAuth";
