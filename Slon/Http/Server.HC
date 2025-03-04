@@ -344,54 +344,6 @@ U0 @slon_http_debug_print_response(SlonHttpSession* session, Bool show_headers =
     }
 }
 
-JsonObject* @slon_http_json_object_from_form_urlencoded_string(SlonHttpSession* session, U8* form_urlencoded_string)
-{
-    // NOTE: We only support one-level arrays and objects, per examples given at https://docs.joinmastodon.org/client/intro/#types
-
-    JsonObject* obj = Json.CreateObject();
-
-    U8* form_urlencoded_string_copy = @slon_strnew(session, form_urlencoded_string);
-    I64 raw_values_count = 0;
-    U8** raw_values = String.Split(form_urlencoded_string_copy, '&', &raw_values_count);
-    I64 i = 0;
-    U8* key;
-    U8* value;
-    U8* sub_key = NULL;
-
-    for (i = 0; i < raw_values_count; i++) {
-        value = @slon_http_decode_urlencoded_string(session, StrFind("=", raw_values[i]) + 1);
-        *(StrFind("=", raw_values[i])) = NULL;
-        key = @slon_http_decode_urlencoded_string(session, raw_values[i]);
-        if (String.EndsWith("[]", key)) {
-            // We have an array
-            StrFind("[]", key)[0] = NULL;
-            if (!obj->@(key)) {
-                obj->set(key, Json.CreateArray(), JSON_ARRAY);
-            }
-            obj->a(key)->append(Json.CreateItem(value, JSON_STRING));
-        } else if (StrFind("[", key) > 0) {
-            // We have an object
-            sub_key = StrFind("[", key) + 1;
-            while (sub_key[StrLen(sub_key) - 1] == ']') {
-                sub_key[StrLen(sub_key) - 1] = NULL;
-            }
-            StrFind("[", key)[0] = NULL;
-            if (!obj->@(key)) {
-                obj->set(key, Json.CreateObject(), JSON_OBJECT);
-            }
-            obj->o(key)->set(sub_key, value, JSON_STRING);
-        } else {
-            // We have a boring old parameter
-            obj->set(key, value, JSON_STRING);
-        }
-
-        @slon_free(session, value);
-        @slon_free(session, key);
-    }
-    @slon_free(session, form_urlencoded_string_copy);
-    return obj;
-}
-
 U0 @slon_http_json_object_add_nested_value(SlonHttpSession* session, JsonObject* obj, U8* name, U8* value, I64 type)
 {
     if (!session || !obj || !name || !value) {
@@ -448,6 +400,34 @@ I64 @slon_http_free_and_null(U64 ptr)
         Free(ptr);
     }
     return NULL;
+}
+
+JsonObject* @slon_http_json_object_from_form_urlencoded_string(SlonHttpSession* session, U8* form_urlencoded_string)
+{
+    JsonObject* obj = Json.CreateObject();
+
+    U8* form_urlencoded_string_copy = @slon_strnew(session, form_urlencoded_string);
+    I64 raw_values_count = 0;
+    U8** raw_values = String.Split(form_urlencoded_string_copy, '&', &raw_values_count);
+    I64 i = 0;
+    U8* key;
+    U8* value;
+
+    for (i = 0; i < raw_values_count; i++) {
+        value = @slon_http_decode_urlencoded_string(session, StrFind("=", raw_values[i]) + 1);
+        *(StrFind("=", raw_values[i])) = NULL;
+        key = @slon_http_decode_urlencoded_string(session, raw_values[i]);
+        if (StrFind("[", key)) {
+            @slon_http_json_object_add_nested_value(session, obj, key, value, JSON_STRING);
+        } else {
+            obj->set(key, value, JSON_STRING);
+        }
+
+        @slon_free(session, value);
+        @slon_free(session, key);
+    }
+    @slon_free(session, form_urlencoded_string_copy);
+    return obj;
 }
 
 JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* session, U8* data)
