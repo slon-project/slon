@@ -16,12 +16,6 @@ if (String.EndsWith(".js", session->path())) {
     return;
 }
 
-if (!StrICmp("/alec.png", session->path())) {
-    session->content_type("image/png");
-    @slon_http_send_file(session, "A:/avatar-circle-4bpp.png");
-    return;
-}
-
 if (String.BeginsWith("/@", session->path())) {
     @slon_web_user_get(session);
     return;
