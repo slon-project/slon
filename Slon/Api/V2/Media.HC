@@ -1,100 +1,3 @@
-U8* @slon_api_v2_media_upload_to_catbox(SlonHttpSession* session, U8* filepath)
-{
-    if (!session || !filepath) {
-        return NULL;
-    }
-
-    I64 data_size = 0;
-    U8* data = FileRead(filepath, &data_size);
-    U8* image_url = NULL;
-
-    // build the multipart/form-data payload
-
-    U8* payload = @slon_calloc(session, 4096 + data_size);
-    I64 payload_size = 0;
-
-    U8* boundary = "----------SlonFormBoundary00";
-    StrPrint(payload, "--%s\r\n", boundary);
-
-    String.Append(payload, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n--%s\r\n", "reqtype", "fileupload", boundary);
-    if (db->o("settings")->@("catbox_userhash")) {
-        String.Append(payload, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n--%s\r\n", "userhash", db->o("settings")->@("catbox_userhash"), boundary);
-    }
-    U8* random_filename = @slon_api_generate_unique_id(session);
-    U8* ext = StrFind(".", filepath) + 1;
-    String.Append(payload, "Content-Disposition: form-data; name=\"fileToUpload\"; filename=\"%s.%s\"\r\n", random_filename, ext);
-    String.Append(payload, "Content-Type: image/%s\r\n\r\n", ext);
-    payload_size = StrLen(payload);
-    @slon_free(session, random_filename);
-
-    MemCpy(payload + payload_size, data, data_size);
-    payload_size += data_size;
-    StrPrint(payload + payload_size, "\r\n--%s--\r\n", boundary);
-    payload_size += 8;
-    payload_size += StrLen(boundary);
-
-    // build the http headers
-    U8* headers = @slon_calloc(session, 4096);
-    String.Append(headers, "POST /user/api.php HTTP/1.1\r\n");
-    String.Append(headers, "Host: catbox.moe\r\n");
-    String.Append(headers, "User-Agent: slon/1.0\r\n");
-    String.Append(headers, "Content-Length: %d\r\n", payload_size);
-    String.Append(headers, "Content-Type: multipart/form-data; boundary=%s\r\n\r\n", boundary);
-
-    I64 send_buffer_size = StrLen(headers) + payload_size;
-    U8* send_buffer = @slon_calloc(session, send_buffer_size);
-
-    MemCpy(send_buffer, headers, StrLen(headers));
-    MemCpy(send_buffer + StrLen(headers), payload, payload_size);
-
-    TlsSocket* s = @tls_socket_create("catbox.moe", 443);
-    while (!@tls_established(s->ctx))
-        Sleep(1);
-
-    I64 left = send_buffer_size;
-    I64 sent = 0;
-    I64 chunk_size = 0;
-    while (left) {
-        chunk_size = 2048;
-        if (chunk_size > left)
-            chunk_size = left;
-        s->send(send_buffer + sent, chunk_size);
-        left -= chunk_size;
-        sent += chunk_size;
-        Sleep(10);
-    }
-
-    I64 bytes_received = 0;
-    I64 response_buffer_size = 0;
-    U8* response_buffer = @slon_calloc(session, 4096);
-
-    while (!bytes_received) {
-        bytes_received = s->receive(response_buffer + response_buffer_size, 4096);
-        response_buffer_size += bytes_received;
-    }
-
-    s->close();
-
-    U8* url_ptr = StrFind("\r\n\r\n", response_buffer) + 4;
-    if (url_ptr < 0x10) {
-        goto slon_api_v2_media_upload_to_catbox_failed;
-    }
-    url_ptr = StrFind("\r\n", url_ptr) + 2;
-    StrFind("\r\n", url_ptr)[0] = NULL;
-
-    image_url = @slon_strnew(session, url_ptr);
-
-slon_api_v2_media_upload_to_catbox_failed:
-
-    @slon_free(session, response_buffer);
-    @slon_free(session, send_buffer);
-    @slon_free(session, headers);
-    @slon_free(session, payload);
-    Free(data);
-
-    return image_url;
-}
-
 U0 @slon_api_v2_media_post(SlonHttpSession* session)
 {
     // NOTE: We only support images at the moment
@@ -178,7 +81,7 @@ U0 @slon_api_v2_media_post(SlonHttpSession* session)
         FileWrite(scratch_buffer, file_ptr, file_size);
 
         // Then, upload to Catbox
-        U8* media_url = @slon_api_v2_media_upload_to_catbox(session, scratch_buffer);
+        U8* media_url = @slon_api_upload_to_catbox(session, scratch_buffer);
         if (media_url) {
             JsonObject* media_object = Json.CreateObject();
             media_object->set("id", media_id, JSON_STRING);

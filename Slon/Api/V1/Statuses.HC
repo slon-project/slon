@@ -1,64 +1,6 @@
 U0 (*@slon_api_status_create_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_delete_fedi)(JsonObject* status) = NULL;
 
-U0 @slon_api_v1_statuses_delete_file_from_catbox(SlonHttpSession* session, U8* filename)
-{
-    if (!session || !filename) {
-        return;
-    }
-
-    // build the multipart/form-data payload
-
-    U8* payload = @slon_calloc(session, 4096);
-    I64 payload_size = 0;
-
-    U8* boundary = "----------SlonFormBoundary00";
-    StrPrint(payload, "--%s\r\n", boundary);
-
-    String.Append(payload, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n--%s\r\n", "reqtype", "deletefiles", boundary);
-    if (db->o("settings")->@("catbox_userhash")) {
-        String.Append(payload, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n--%s\r\n", "userhash", db->o("settings")->@("catbox_userhash"), boundary);
-    }
-    String.Append(payload, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n--%s\r\n", "files", filename, boundary);
-    payload_size = StrLen(payload);
-
-    // build the http headers
-    U8* headers = @slon_calloc(session, 4096);
-    String.Append(headers, "POST /user/api.php HTTP/1.1\r\n");
-    String.Append(headers, "Host: catbox.moe\r\n");
-    String.Append(headers, "User-Agent: slon/1.0\r\n");
-    String.Append(headers, "Content-Length: %d\r\n", payload_size);
-    String.Append(headers, "Content-Type: multipart/form-data; boundary=%s\r\n\r\n", boundary);
-
-    I64 send_buffer_size = StrLen(headers) + payload_size;
-    U8* send_buffer = @slon_calloc(session, send_buffer_size);
-
-    MemCpy(send_buffer, headers, StrLen(headers));
-    MemCpy(send_buffer + StrLen(headers), payload, payload_size);
-
-    TlsSocket* s = @tls_socket_create("catbox.moe", 443);
-    while (!@tls_established(s->ctx))
-        Sleep(1);
-
-    s->send(send_buffer, send_buffer_size);
-
-    I64 bytes_received = 0;
-    I64 response_buffer_size = 0;
-    U8* response_buffer = @slon_calloc(session, 4096);
-
-    while (!bytes_received) {
-        bytes_received = s->receive(response_buffer + response_buffer_size, 4096);
-        response_buffer_size += bytes_received;
-    }
-
-    s->close();
-
-    @slon_free(session, response_buffer);
-    @slon_free(session, send_buffer);
-    @slon_free(session, payload);
-    @slon_free(session, headers);
-}
-
 JsonObject* @slon_api_v1_statuses_lookup_by_id(U8* id, JsonArray* statuses)
 {
     if (!id || !statuses) {
@@ -254,7 +196,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
                             while (*(attachment_url_ptr - 1) != '/') {
                                 --attachment_url_ptr;
                             }
-                            @slon_api_v1_statuses_delete_file_from_catbox(session, attachment_url_ptr);
+                            @slon_api_delete_from_catbox(session, attachment_url_ptr);
                         }
                     }
                 }
