@@ -6,20 +6,23 @@
 #define SLON_HTTP_VERB_POST 5
 #define SLON_HTTP_VERB_PUT 6
 
-#define SLON_MULTIPART_PARSER_CONSUME_BOUNDARY 0
-#define SLON_MULTIPART_PARSER_CONSUME_CONTENT_DISPOSITION 1
-#define SLON_MULTIPART_PARSER_CONSUME_CONTENT 2
-#define SLON_MULTIPART_PARSER_DONE 3
+#define SLON_MULTIPART_CONSUME_BOUNDARY 0
+
+#define SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_HEADER 10
+#define SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_NAME_FIELD 11
+#define SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_NAME 12
+#define SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_TEXT_OR_FILE 13
+
+#define SLON_MULTIPART_CONSUME_CONTENT_TYPE_HEADER 20
+#define SLON_MULTIPART_CONSUME_CONTENT_TYPE 21
+
+#define SLON_MULTIPART_CONSUME_DATA 30
+
+#define SLON_MULTIPART_SKIP_REMAINING_HEADERS 100
 
 #define SLON_SCRATCH_BUFFER_AND_REQUEST_JSON \
     U8 scratch_buffer[256];                  \
     JsonObject* request_json = @slon_http_request_json(session);
-
-#define SLON_DEBUG_PRINT_REQUEST_JSON                            \
-    JsonObject* request_json = @slon_http_request_json(session); \
-    U8* request_json_str = Json.Stringify(request_json);         \
-    AdamLog("request_json: %s\n", request_json_str);             \
-    Free(request_json_str);
 
 JsonObject* SLON_HTTP_STATUS_CODES = Json.ParseFile("M:/Slon/Settings/status_codes.json");
 JsonArray* SLON_TLDS = Json.ParseFile("M:/Slon/Settings/tlds.json");
@@ -29,6 +32,20 @@ U8** tld_array = CAlloc(sizeof(U8*) * SLON_TLDS->length);
 for (tld_cnt = 0; tld_cnt < SLON_TLDS->length; tld_cnt++) {
     tld_array[tld_cnt] = SLON_TLDS->@(tld_cnt);
 }
+
+class SlonMultipartParser {
+    U8* data;
+    CFifoU8* consumed;
+    I64 pos;
+    I64 length;
+    I64 state;
+};
+
+class SlonMultipartFile {
+    U8* buffer;
+    I64 size;
+    U8* content_type;
+};
 
 class SlonHttpBuffer {
     U8* data;

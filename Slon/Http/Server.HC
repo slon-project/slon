@@ -392,94 +392,242 @@ JsonObject* @slon_http_json_object_from_form_urlencoded_string(SlonHttpSession* 
     return obj;
 }
 
-JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* session, U8* multipart_form_data)
+U0 @slon_http_json_object_add_nested_value(SlonHttpSession* session, JsonObject* obj, U8* name, U8* value, I64 type)
 {
-    JsonObject* obj = Json.CreateObject();
-    U8* multipart_form_data_copy = @slon_strnew(session, multipart_form_data);
-
-    U8* boundary = StrFind("boundary=", session->header("content-type")) + 9;
-    // Strip begin double-quotes and ending CRLF, double-quotes
-    while (boundary[0] == '"')
-        boundary++;
-
-    while (boundary[StrLen(boundary) - 1] == '\"' || boundary[StrLen(boundary) - 1] == ' ' || boundary[StrLen(boundary) - 1] == '\r' || boundary[StrLen(boundary) - 1] == '\n')
-        boundary[StrLen(boundary) - 1] = NULL;
-
-    I64 state = SLON_MULTIPART_PARSER_CONSUME_BOUNDARY;
-    I64 lines_count = 0;
-    U8** lines = String.Split(multipart_form_data_copy, '\n', &lines_count);
-
-    U8* line;
-    U8* name;
-    U8* value = @slon_calloc(session, 262144);
-    U8* sub_key = NULL;
-
-    I64 i = 0;
-    while (i < lines_count) {
-        line = lines[i];
-        // Strip any ending CRLF
-        while (line[StrLen(line) - 1] == '\r' || line[StrLen(line) - 1] == '\n') {
-            line[StrLen(line) - 1] = NULL;
-        }
-        switch (state) {
-        case SLON_MULTIPART_PARSER_CONSUME_BOUNDARY:
-            if (StrFind(boundary, line)) {
-                state = SLON_MULTIPART_PARSER_CONSUME_CONTENT_DISPOSITION;
-            }
-            break;
-        case SLON_MULTIPART_PARSER_CONSUME_CONTENT_DISPOSITION:
-            if (StrFind("ontent-", line) && StrFind("isposition:", line) && StrFind("name=", line)) {
-                name = StrFind("name=", line) + 5;
-                // Strip begin/end double-quotes
-                while (name[0] == '"')
-                    name++;
-                while (name[StrLen(name) - 1] == '\"')
-                    name[StrLen(name) - 1] = NULL;
-                StrCpy(value, "");
-                state = SLON_MULTIPART_PARSER_CONSUME_CONTENT;
-            }
-            break;
-        case SLON_MULTIPART_PARSER_CONSUME_CONTENT:
-            if (StrFind(boundary, line)) {
-                if (String.EndsWith("[]", name)) {
-                    // We have an array
-                    StrFind("[]", name)[0] = NULL;
-                    if (!obj->@(name)) {
-                        obj->set(name, Json.CreateArray(), JSON_ARRAY);
-                    }
-                    obj->a(name)->append(Json.CreateItem(value, JSON_STRING));
-                } else if (StrFind("[", name) > 0) {
-                    // We have an object
-                    sub_key = StrFind("[", name) + 1;
-                    while (sub_key[StrLen(sub_key) - 1] == ']') {
-                        sub_key[StrLen(sub_key) - 1] = NULL;
-                    }
-                    StrFind("[", name)[0] = NULL;
-                    if (!obj->@(name)) {
-                        obj->set(name, Json.CreateObject(), JSON_OBJECT);
-                    }
-                    obj->o(name)->set(sub_key, value, JSON_STRING);
-                } else {
-                    // We have a boring old parameter
-                    obj->set(name, value, JSON_STRING);
-                }
-                if (!String.EndsWith("--", line)) {
-                    state = SLON_MULTIPART_PARSER_CONSUME_CONTENT_DISPOSITION;
-                } else {
-                    state = SLON_MULTIPART_PARSER_DONE;
-                }
-            } else {
-                String.Append(value, line);
-            }
-            break;
-        default:
-            break;
-        }
-        ++i;
+    if (!session || !obj || !name || !value) {
+        return;
     }
 
-    @slon_free(session, value);
-    @slon_free(session, multipart_form_data_copy);
+    // Handle simple 1-dimensional array case first: name[]=value
+    if (StrOcc(name, '[') == 1 && String.EndsWith("[]", name)) {
+        StrFind("[]", name)[0] = NULL;
+        if (!obj->a(name)) {
+            obj->set(name, Json.CreateArray(), JSON_ARRAY);
+        }
+        obj->a(name)->append(Json.CreateItem(value, type));
+        return;
+    }
+
+    Bool value_is_array_member = FALSE;
+    if (String.EndsWith("[]", name)) {
+        value_is_array_member = TRUE;
+        StrFind("[]", name)[0] = NULL;
+    }
+
+    I64 i = 0;
+    I64 depth = StrOcc(name, '[');
+    I64 keys_length = 0;
+    U8** keys = String.Split(name, '[', &keys_length);
+
+    for (i = 0; i < depth; i++) {
+        String.Trim(keys[i], ']', TRIM_RIGHT);
+        if (!obj->o(keys[i])) {
+            // Create the empty objects as we traverse
+            obj->set(keys[i], Json.CreateObject(), JSON_OBJECT);
+        }
+        obj = obj->o(keys[i]);
+    }
+
+    String.Trim(keys[i], ']', TRIM_RIGHT);
+    if (value_is_array_member) {
+        if (!obj->a(keys[i])) {
+            // Create the empty array if it does not exist
+            obj->set(keys[i], Json.CreateArray(), JSON_ARRAY);
+        }
+        // Append keys[i-1]: { keys[i]: [ ..., value ] }
+        obj->a(keys[i])->append(Json.CreateItem(value, type));
+    } else {
+        // Set keys[i-1]: { keys[i]: value }
+        obj->set(keys[i], value, type);
+    }
+}
+
+I64 @slon_http_free_and_null(U64 ptr)
+{
+    if (ptr) {
+        Free(ptr);
+    }
+    return NULL;
+}
+
+JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* session, U8* data)
+{
+    if (!session || !data || !session->header("content-type")) {
+        return SLON_EMPTY_JSON_OBJECT;
+    }
+
+    U8 scratch_buffer[256];
+
+    SlonMultipartParser* mp = @slon_calloc(session, sizeof(SlonMultipartParser));
+    mp->consumed = FifoU8New(2048, adam_task);
+
+    JsonObject* obj = Json.CreateObject();
+    U8* boundary = StrFind("boundary=", session->header("content-type")) + 9;
+    String.Trim(boundary);
+    String.Trim(boundary, '"');
+
+    mp->data = data;
+    mp->state = SLON_MULTIPART_CONSUME_BOUNDARY;
+    mp->length = Str2I64(session->header("content-length"));
+
+    U8* content_disposition_header = "content-disposition: form-data; ";
+    U8* content_type_header = "content-type: ";
+
+    SlonMultipartFile* file = NULL;
+    U8* name = NULL;
+    U8* tmp = NULL;
+    U8* value = NULL;
+    I64 token;
+
+    while (mp->pos < mp->length) {
+
+        token = mp->data[mp->pos];
+        switch (mp->state) {
+
+        case SLON_MULTIPART_CONSUME_DATA:
+            StrPrint(scratch_buffer, "\r\n--%s", boundary);
+            if (!MemCmp(mp->data + mp->pos, scratch_buffer, StrLen(scratch_buffer))) {
+                if (file) {
+                    file->size = mp->data + mp->pos - file->buffer;
+                    if (StrFind("[", name)) {
+                        @slon_http_json_object_add_nested_value(session, obj, name, file, JSON_NUMBER);
+                    } else {
+                        obj->set(name, file, JSON_NUMBER);
+                    }
+                } else {
+                    mp->data[mp->pos] = NULL;
+                    if (StrFind("[", name)) {
+                        @slon_http_json_object_add_nested_value(session, obj, name, value, JSON_STRING);
+                    } else {
+                        obj->set(name, value, JSON_STRING);
+                    }
+                }
+                file = NULL;
+                name = @slon_http_free_and_null(name);
+                tmp = @slon_http_free_and_null(tmp);
+                ++mp->pos;
+                mp->state = SLON_MULTIPART_CONSUME_BOUNDARY;
+            } else {
+                ++mp->pos;
+            }
+            break;
+
+        case SLON_MULTIPART_CONSUME_BOUNDARY:
+            StrPrint(scratch_buffer, "--%s", boundary);
+            if (!MemCmp(mp->data + mp->pos, scratch_buffer, StrLen(scratch_buffer))) {
+                mp->pos += StrLen(scratch_buffer) + 2;
+                mp->state = SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_HEADER;
+            } else {
+                ++mp->pos;
+            }
+            break;
+
+        case SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_HEADER:
+            MemSet(scratch_buffer, NULL, StrLen(content_disposition_header) + 4);
+            MemCpy(scratch_buffer, mp->data + mp->pos, StrLen(content_disposition_header));
+            if (!StrICmp(scratch_buffer, content_disposition_header)) {
+                mp->pos += StrLen(scratch_buffer);
+                mp->state = SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_NAME_FIELD;
+            } else {
+                ++mp->pos;
+            }
+            break;
+
+        case SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_NAME_FIELD:
+            if (!MemCmp(mp->data + mp->pos, "name=", 5)) {
+                mp->pos += 5;
+                FifoU8Flush(mp->consumed);
+                mp->state = SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_NAME;
+            } else {
+                ++mp->pos;
+            }
+            break;
+
+        case SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_NAME:
+            switch (token) {
+            case ';':
+            case '\r':
+                name = @json_string_from_fifo(mp->consumed);
+                String.Trim(name);
+                String.Trim(name, '"');
+                mp->state = SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_TEXT_OR_FILE;
+                break;
+            default:
+                FifoU8Ins(mp->consumed, token);
+                break;
+            }
+            ++mp->pos;
+            break;
+
+        case SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_TEXT_OR_FILE:
+            switch (token) {
+            case '\n':
+                tmp = @json_string_from_fifo(mp->consumed);
+                if (StrFind("filename=", tmp)) {
+                    file = @slon_calloc(session, sizeof(SlonMultipartFile));
+                    mp->state = SLON_MULTIPART_CONSUME_CONTENT_TYPE_HEADER;
+                } else {
+                    mp->state = SLON_MULTIPART_SKIP_REMAINING_HEADERS;
+                }
+                break;
+            default:
+                FifoU8Ins(mp->consumed, token);
+                break;
+            }
+            ++mp->pos;
+            break;
+
+        case SLON_MULTIPART_CONSUME_CONTENT_TYPE_HEADER:
+            MemSet(scratch_buffer, NULL, StrLen(content_type_header) + 4);
+            MemCpy(scratch_buffer, mp->data + mp->pos, StrLen(content_type_header));
+            if (!StrICmp(scratch_buffer, content_type_header)) {
+                mp->pos += StrLen(scratch_buffer);
+                mp->state = SLON_MULTIPART_CONSUME_CONTENT_TYPE;
+            } else {
+                ++mp->pos;
+            }
+            break;
+
+        case SLON_MULTIPART_CONSUME_CONTENT_TYPE:
+            switch (token) {
+            case ';':
+            case '\r':
+                file->content_type = @json_string_from_fifo(mp->consumed);
+                String.Trim(file->content_type);
+                String.Trim(file->content_type, '"');
+                mp->state = SLON_MULTIPART_SKIP_REMAINING_HEADERS;
+                break;
+            default:
+                FifoU8Ins(mp->consumed, token);
+                break;
+            }
+            ++mp->pos;
+            break;
+
+        case SLON_MULTIPART_SKIP_REMAINING_HEADERS:
+            switch (token) {
+            case '\r':
+            case '\n':
+                break;
+            default:
+                if (file) {
+                    file->buffer = mp->data + mp->pos;
+                } else {
+                    value = mp->data + mp->pos;
+                }
+                mp->state = SLON_MULTIPART_CONSUME_DATA;
+                break;
+            }
+            ++mp->pos;
+            break;
+        }
+    }
+
+slon_http_json_object_from_multipart_form_data_done:
+    FifoU8Del(mp->consumed);
+    @slon_free(session, mp);
+    name = @slon_http_free_and_null(name);
+    tmp = @slon_http_free_and_null(tmp);
     return obj;
 }
 
@@ -501,11 +649,6 @@ U0 @slon_http_parse_request_as_form_urlencoded(SlonHttpSession* session)
 
 U0 @slon_http_parse_request_as_multipart_form_data(SlonHttpSession* session)
 {
-    if (StrFind("; filename=", session->request->data)) {
-        // Skip parsing - this is a media upload
-        session->request->json = Json.Parse("{}");
-        return;
-    }
     session->request->json = @slon_http_json_object_from_multipart_form_data(session, session->request->data);
 }
 
