@@ -3,7 +3,6 @@ U0 @slon_api_v2_media_post(SlonHttpSession* session)
     // NOTE: We only support images at the moment
 
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
-    no_warn request_json;
 
     if (@slon_api_authorized(session)) {
 
