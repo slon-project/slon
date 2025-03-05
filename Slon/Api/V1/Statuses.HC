@@ -1,45 +1,23 @@
 U0 (*@slon_api_status_create_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_delete_fedi)(JsonObject* status) = NULL;
 
-JsonArray* @slon_api_v1_statuses_lookup_descendants_by_id(U8* id, JsonArray* statuses)
+JsonArray* @slon_api_v1_statuses_find_descendants_by_id(U8* id)
 {
-    if (!id || !statuses) {
+    if (!id) {
         return NULL;
     }
-    I64 i;
+
     JsonArray* arr = Json.CreateArray();
-    JsonObject* status;
-    for (i = 0; i < statuses->length; i++) {
-        status = statuses->@(i);
-        if (status->@("in_reply_to_id") && !StrICmp(status->@("in_reply_to_id"), id)) {
+    JsonObject* status = NULL;
+    JsonKey* key = db->o("statuses")->keys;
+    while (key) {
+        status = @slon_api_status_lookup_by_in_reply_to_id(id, key->value);
+        if (status) {
             arr->append(Json.CreateItem(status, JSON_OBJECT));
         }
+        key = key->next;
     }
     return arr;
-}
-
-JsonArray* @slon_api_v1_statuses_find_descendants_by_id(U8* id, U8* account_id)
-{
-    if (!id || !account_id) {
-        return NULL;
-    }
-    JsonArray* arr = NULL;
-    // Lookup in public timeline
-    arr = @slon_api_v1_statuses_lookup_descendants_by_id(id, db->o("timelines")->a("public"));
-    if (arr && arr->length) {
-        return arr;
-    }
-    // Then, lookup in home timeline
-    arr = @slon_api_v1_statuses_lookup_descendants_by_id(id, db->o("timelines")->o("home")->a(account_id));
-    if (arr && arr->length) {
-        return arr;
-    }
-    // Finally, lookup in account's statuses
-    arr = @slon_api_v1_statuses_lookup_descendants_by_id(id, db->o("statuses")->a(account_id));
-    if (arr && arr->length) {
-        return arr;
-    }
-    return SLON_EMPTY_JSON_ARRAY;
 }
 
 U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array)
@@ -55,11 +33,13 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
     I64 limit = 20; // default
     U64 max_id = 0;
     U64 min_id = 0;
-    Bool only_media = request_json->@("only_media");
-    Bool exclude_replies = request_json->@("exclude_replies");
-    Bool exclude_reblogs = request_json->@("exclude_reblogs");
+
+    Bool only_media = @slon_api_get_value_as_boolean(request_json->@("only_media", TRUE));
+    Bool exclude_replies = @slon_api_get_value_as_boolean(request_json->@("exclude_replies", TRUE));
+    Bool exclude_reblogs = @slon_api_get_value_as_boolean(request_json->@("exclude_reblogs", TRUE));
+    Bool pinned = @slon_api_get_value_as_boolean(request_json->@("pinned", TRUE));
+
     no_warn exclude_reblogs;
-    Bool pinned = request_json->@("pinned");
     // FIXME: Implement "only_media", "exclude_reblogs", "tagged"
     Bool exclude_status = FALSE;
     U64 status_id = 0;
@@ -95,7 +75,7 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
             if (only_media && !Json.Get(status, "media_attachments")(JsonArray*)->length) {
                 exclude_status = TRUE;
             }
-            if (exclude_replies && StrLen(status->@("in_reply_to_account_id")) > 0 && StrICmp(account_id, status->@("in_reply_to_account_id"))) {
+            if (exclude_replies && StrLen(status->@("in_reply_to_acct_id")) > 0 && StrICmp(account_id, status->@("in_reply_to_acct_id"))) {
                 exclude_status = TRUE;
             }
             if (pinned && !status->@("pinned")) {
@@ -192,7 +172,6 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
     JsonObject* status = NULL;
 
     if (@slon_api_authorized(session)) {
-        SLON_AUTH_ACCOUNT_ID
 
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
             JsonObject* context = Json.CreateObject();
@@ -200,10 +179,9 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
 
             // Get ancestors
             id = session->path(3);
-            status = @slon_api_find_status_by_id(id, account_id);
+            status = @slon_api_find_status_by_id(id, NULL);
             while (status && status->@("in_reply_to_id")) {
-                id = status->@("in_reply_to_id");
-                status = @slon_api_find_status_by_id(id, account_id);
+                status = @slon_api_find_status_by_id(status->@("in_reply_to_id"), status->@("in_reply_to_acct_id"));
                 if (status) {
                     context->a("ancestors")->append(Json.CreateItem(status, JSON_OBJECT));
                 }
@@ -211,13 +189,13 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
 
             // Get descendants
             id = session->path(3);
-            context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(id, account_id), JSON_ARRAY);
+            context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(id), JSON_ARRAY);
 
             session->send(context);
             return;
         }
 
-        status = @slon_api_find_status_by_id(id, account_id);
+        status = @slon_api_find_status_by_id(id, NULL);
         if (status) {
             session->send(status);
             return;
@@ -240,6 +218,15 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
     if (@slon_api_authorized(session)) {
         SLON_AUTH_ACCOUNT_ID
 
+        U8* id = NULL;
+
+        if (session->path_count() > 4) {
+            // FIXME: Do stuff
+            AdamLog("session->path_count is : %d\n", session->path_count());
+            session->status(404);
+            return;
+        }
+
         Bool idempotency_key_already_seen = FALSE;
         U8* idempotency_key = session->header("idempotency-key");
         if (StrLen(idempotency_key) > 0 && db->o("idempotency_keys")->@(idempotency_key)) {
@@ -249,7 +236,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
             Json.Set(db->o("idempotency_keys"), idempotency_key, Now, JSON_NUMBER);
         }
 
-        U8* id = @slon_api_generate_unique_id(session);
+        id = @slon_api_generate_unique_id(session);
         U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
 
         JsonObject* app_object = db->o("apps")->@(Json.Get(session->auth, "client_id"));
@@ -285,7 +272,9 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         // IceCubesApp lets us post with +:         media_attachments, replies_count, spoiler_text, sensitive
 
         JsonObject* status = Json.CreateObject();
+        JsonObject* reply_to_status = NULL;
         JsonArray* media_attachments = NULL;
+        String.Trim(request_json->@("status"));
         status->set("id", id, JSON_STRING);
         status->set("created_at", created_at, JSON_STRING);
         status->set("content", request_json->@("status"), JSON_STRING);
@@ -318,15 +307,14 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
 
         if (StrLen(in_reply_to_id) > 0) {
             status->set("in_reply_to_id", in_reply_to_id, JSON_STRING);
+            reply_to_status = @slon_api_find_status_by_id(in_reply_to_id);
+            if (reply_to_status) {
+                status->set("in_reply_to_acct_id", reply_to_status->o("account")->@("id"), JSON_STRING);
+            }
         }
 
         if (!idempotency_key_already_seen) {
-            db->o("statuses")->a(account_id)->append(Json.CreateItem(status, JSON_OBJECT));
-            db->o("timelines")->a("public")->append(Json.CreateItem(status, JSON_OBJECT));
-            @slon_db_save_statuses_to_disk;
-            @slon_db_save_timelines_to_disk;
-            @slon_db_instance_increment_status_count;
-            @slon_db_save_instance_to_disk;
+            @slon_api_create_status(status, account_id);
             if (@slon_api_status_create_fedi) {
                 @slon_api_status_create_fedi(Json.Clone(status));
             }

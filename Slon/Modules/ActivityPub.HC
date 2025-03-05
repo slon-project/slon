@@ -441,6 +441,7 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     StrFind("/statuses/", this_actor)[0] = NULL;
 
     JsonObject* create_object = Json.CreateObject();
+    JsonObject* reply_to_status = NULL;
 
     create_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
     StrPrint(scratch_buffer, "%s/activity", status->@("uri"));
@@ -465,16 +466,10 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     note_object->set("sensitive", status->@("sensitive"), JSON_BOOLEAN);
     note_object->set("atomUri", status->@("uri"), JSON_STRING);
     if (status->@("in_reply_to_id")) {
-        // lookup status uri in user's home timeline
-        JsonArray* lookup_array = db->o("timelines")->o("home")->a(status->o("account")->@("id"));
-        if (lookup_array) {
-            for (i = 0; i < lookup_array->length; i++) {
-                if (!StrICmp(status->@("in_reply_to_id"), lookup_array->o(i)->@("id"))) {
-                    note_object->set("inReplyTo", lookup_array->o(i)->@("uri"), JSON_STRING);
-                    note_object->set("inReplyToAtomUri", lookup_array->o(i)->@("uri"), JSON_STRING);
-                    break;
-                }
-            }
+        reply_to_status = @slon_api_find_status_by_id(status->@("in_reply_to_id"), status->@("in_reply_to_acct_id"));
+        if (reply_to_status) {
+            note_object->set("inReplyTo", reply_to_status->@("uri"), JSON_STRING);
+            note_object->set("inReplyToAtomUri", reply_to_status->@("uri"), JSON_STRING);
         }
     } else {
         note_object->set("inReplyTo", NULL, JSON_NULL);
@@ -651,8 +646,9 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     return account;
 }
 
-U8* @slon_activitypub_status_id_by_uri(U8* uri, JsonArray* statuses)
+JsonObject* @slon_activitypub_status_by_uri(U8* uri, JsonArray* timeline)
 {
+    JsonArray* statuses = @slon_api_status_array_from_timeline(timeline);
     if (!uri || !statuses) {
         return NULL;
     }
@@ -661,7 +657,7 @@ U8* @slon_activitypub_status_id_by_uri(U8* uri, JsonArray* statuses)
     for (i = 0; i < statuses->length; i++) {
         status = statuses->@(i);
         if (status->@("uri") && !StrICmp(status->@("uri"), uri)) {
-            return status->@("id");
+            return status;
         }
     }
     return NULL;
@@ -682,6 +678,26 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     JsonObject* status = NULL;
 
     JsonObject* request_object = NULL;
+    U8* status_id = NULL;
+
+    if (!StrICmp("announce", request_json->@("type"))) {
+        if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
+            session->status(401);
+            return;
+        }
+        status_id = StrFind("/", StrFind("/statuses/", request_json->@("object")) + 1) + 1;
+        statuses = db->o("statuses")->a(account->@("id"));
+        for (i = 0; i < statuses->length; i++) {
+            status = statuses->@(i);
+            if (!StrICmp(status_id, status->@("id"))) {
+                // TODO: https://docs.joinmastodon.org/methods/statuses/#reblogged_by
+                status->set("reblog_count", status->@("reblog_count") + 1);
+                break;
+            }
+        }
+        @slon_db_save_statuses_to_disk;
+        request_object = Json.Clone(request_json);
+    }
 
     if (!StrICmp("follow", request_json->@("type"))) {
         if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
@@ -780,14 +796,13 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             return;
         }
 
-        if (db->o("timelines")->o("home")->a(account->@("id"))) {
-            if (@slon_activitypub_status_exists(db->o("timelines")->o("home")->a(account->@("id")), request_json->o("object")->@("atomUri"))) {
+        JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session);
+        if (db->o("statuses")->a(remote_account->@("id"))) {
+            if (@slon_activitypub_status_exists(db->o("statuses")->a(remote_account->@("id")), request_json->o("object")->@("atomUri"))) {
                 session->status(200);
                 return;
             }
         }
-
-        JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session);
 
         JsonObject* new_status = Json.CreateObject();
         U8* id = @slon_api_generate_unique_id(session);
@@ -830,9 +845,10 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
         }
 
         if (request_json->o("object")->@("inReplyTo") || request_json->o("object")->@("inReplyToAtomUri")) {
-            U8* reply_to_post_id = @slon_activitypub_status_id_by_uri(request_json->o("object")->@("inReplyTo"), db->o("timelines")->o("home")->a(account->@("id")));
-            if (reply_to_post_id) {
-                new_status->set("in_reply_to_id", reply_to_post_id, JSON_STRING);
+            JsonObject* reply_to_post = @slon_activitypub_status_by_uri(request_json->o("object")->@("inReplyTo"), db->o("timelines")->o("home")->a(account->@("id")));
+            if (reply_to_post) {
+                new_status->set("in_reply_to_id", reply_to_post->@("id"), JSON_STRING);
+                new_status->set("in_reply_to_acct_id", reply_to_post->o("account")->@("id"), JSON_STRING);
             }
         }
 
@@ -854,12 +870,8 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
         new_status->set("spoiler_text", "", JSON_STRING);
         new_status->set("sensitive", request_json->o("object")->@("sensitive"), JSON_BOOLEAN);
 
-        if (!db->o("timelines")->o("home")->a(account->@("id"))) {
-            db->o("timelines")->o("home")->set(account->@("id"), Json.CreateArray(), JSON_ARRAY);
-        }
-        db->o("timelines")->o("home")->a(account->@("id"))->append(Json.CreateItem(new_status, JSON_OBJECT));
+        @slon_api_create_status(new_status, remote_account->@("id"), user);
 
-        @slon_db_save_timelines_to_disk;
         @slon_free(session, id);
         request_object = Json.CreateObject();
         request_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
@@ -874,11 +886,12 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             session->status(401);
             return;
         }
-        U8* status_id = StrFind("/", StrFind("/statuses/", request_json->@("object")) + 1) + 1;
+        status_id = StrFind("/", StrFind("/statuses/", request_json->@("object")) + 1) + 1;
         statuses = db->o("statuses")->a(account->@("id"));
         for (i = 0; i < statuses->length; i++) {
             status = statuses->@(i);
             if (!StrICmp(status_id, status->@("id"))) {
+                // TODO: https://docs.joinmastodon.org/methods/statuses/#favourited_by
                 status->set("favourites_count", status->@("favourites_count") + 1);
                 break;
             }

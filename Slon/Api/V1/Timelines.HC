@@ -1,27 +1,13 @@
 U0 @slon_api_v1_timelines_home(SlonHttpSession* session, U8* account_id)
 {
     // Return the Account's Home timeline
-    JsonArray* status_array = db->o("timelines")->o("home")->a(account_id);
-    if (!status_array) {
-        session->send(SLON_EMPTY_JSON_ARRAY);
-        return;
-    }
-    @slon_api_v1_statuses_query(session, status_array);
+    @slon_api_v1_statuses_query(session, @slon_api_status_array_from_timeline(db->o("timelines")->o("home")->a(account_id)));
 }
 
 U0 @slon_api_v1_timelines_public(SlonHttpSession* session)
 {
-    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
-    no_warn scratch_buffer;
-
     // Return the Public timeline
-    JsonArray* status_array = db->o("timelines")->a("public");
-    if (!status_array) {
-        session->send(SLON_EMPTY_JSON_ARRAY);
-        return;
-    }
-    request_json->unset("exclude_replies");
-    @slon_api_v1_statuses_query(session, status_array);
+    @slon_api_v1_statuses_query(session, @slon_api_status_array_from_timeline(db->o("timelines")->a("public")));
 }
 
 U0 @slon_api_v1_timelines_get(SlonHttpSession* session)

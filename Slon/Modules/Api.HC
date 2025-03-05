@@ -308,36 +308,134 @@ JsonObject* @slon_api_status_lookup_by_id(U8* id, JsonArray* statuses)
     JsonObject* status;
     for (i = 0; i < statuses->length; i++) {
         status = statuses->@(i);
-        if (status->@("id") && !StrICmp(status->@("id"), id)) {
+        if (!status->@("deleted") && status->@("id") && !StrICmp(status->@("id"), id)) {
             return status;
         }
     }
     return NULL;
 }
 
-JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id)
+JsonObject* @slon_api_status_lookup_by_in_reply_to_id(U8* id, JsonArray* statuses)
 {
-    if (!id) {
+    if (!id || !statuses) {
         return NULL;
     }
-    JsonObject* status = NULL;
-    // Lookup in public timeline
-    status = @slon_api_status_lookup_by_id(id, db->o("timelines")->a("public"));
-    if (status) {
-        return status;
-    }
-    if (!account_id) {
-        return NULL;
-    }
-    // Then, lookup in home timeline
-    status = @slon_api_status_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
-    if (status) {
-        return status;
-    }
-    // Finally, lookup in account's statuses
-    status = @slon_api_status_lookup_by_id(id, db->o("statuses")->a(account_id));
-    if (status) {
-        return status;
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && status->@("in_reply_to_id") && !StrICmp(status->@("in_reply_to_id"), id)) {
+            return status;
+        }
     }
     return NULL;
+}
+
+JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id = NULL)
+{
+    if (account_id) {
+        return @slon_api_status_lookup_by_id(id, db->o("statuses")->a(account_id));
+    }
+    JsonObject* status = NULL;
+    JsonKey* key = db->o("statuses")->keys;
+    while (key) {
+        status = @slon_api_status_lookup_by_id(id, key->value);
+        if (status) {
+            return status;
+        }
+        key = key->next;
+    }
+    return NULL;
+}
+
+U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = NULL)
+{
+    if (!status || !account_id) {
+        return;
+    }
+    if (!db->o("statuses")->a(account_id)) {
+        db->o("statuses")->set(account_id, Json.CreateArray(), JSON_ARRAY);
+    }
+    db->o("statuses")->a(account_id)->append(Json.CreateItem(status, JSON_OBJECT));
+    @slon_db_save_statuses_to_disk;
+    @slon_db_instance_increment_status_count;
+    @slon_db_save_instance_to_disk;
+
+    JsonObject* status_item = Json.CreateObject();
+    status_item->set("account_id", account_id, JSON_STRING);
+    status_item->set("status_id", status->@("id"), JSON_STRING);
+
+    // If account_id is a local account, publish to public timeline
+    JsonObject* acct = @slon_api_account_by_id(account_id);
+    if (!acct->@("remote_actor") && !StrICmp("public", status->@("visibility"))) {
+        if (!db->o("timelines")->a("public")) {
+            db->o("timelines")->set("public", Json.CreateArray(), JSON_ARRAY);
+        }
+        db->o("timelines")->a("public")->append(Json.CreateItem(status_item, JSON_OBJECT));
+    }
+    // If account_id is a remote account, and we have an ActivityPub user, post to their timeline
+    if (acct->@("remote_actor") && to_ap_user) {
+        JsonObject* acct_for_ap_user = @slon_api_account_by_username(to_ap_user);
+        if (acct_for_ap_user) {
+            if (!db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))) {
+                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(), JSON_ARRAY);
+            }
+            db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))->append(Json.CreateItem(status_item, JSON_OBJECT));
+        }
+    }
+    @slon_db_save_timelines_to_disk;
+}
+
+JsonObject* @slon_api_get_timeline_item(JsonObject* timeline_item)
+{
+    if (!timeline_item) {
+        return NULL;
+    }
+    JsonArray* statuses = db->o("statuses")->a(timeline_item->@("account_id"));
+    JsonObject* status = NULL;
+    if (!statuses) {
+        return NULL;
+    }
+    I64 i;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && !StrICmp(status->@("id"), timeline_item->@("status_id"))) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
+JsonArray* @slon_api_status_array_from_timeline(JsonArray* timeline)
+{
+    if (!timeline) {
+        return NULL;
+    }
+    JsonArray* status_array = Json.CreateArray();
+    JsonObject* timeline_item = NULL;
+    JsonObject* status = NULL;
+    I64 i;
+    for (i = 0; i < timeline->length; i++) {
+        timeline_item = timeline->@(i);
+        status = @slon_api_get_timeline_item(timeline_item);
+        if (status) {
+            status_array->append(Json.CreateItem(status, JSON_OBJECT));
+        }
+    }
+    return status_array;
+}
+
+Bool @slon_api_get_value_as_boolean(JsonKey* key)
+{
+    if (!key) {
+        return FALSE;
+    }
+    switch (key->type) {
+    case JSON_STRING:
+        return key->value && !StrICmp("true", key->value);
+    case JSON_BOOLEAN:
+        return key->value;
+    default:
+        return FALSE;
+    }
 }
