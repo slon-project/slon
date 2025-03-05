@@ -6,6 +6,8 @@ extern @http_response* @slon_activitypub_signed_request(U8* url_string, U8* fetc
 class SlonCatboxUpload {
     JsonKey* key;
     U8* filepath;
+    U0 (*callback)(U64 arg = NULL);
+    U64 callback_arg;
 };
 
 Bool @slon_api_authorized(SlonHttpSession* session)
@@ -215,6 +217,9 @@ U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
 
     cb->key->value = StrNew(url_ptr, adam_task);
     cb->key->type = JSON_STRING;
+    if (cb->callback) {
+        cb->callback(cb->callback_arg);
+    }
 
 slon_api_upload_to_catbox_failed:
 

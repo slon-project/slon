@@ -264,7 +264,6 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
                 return;
             }
 
-            // FIXME: Support avatars/banners
             acct = @slon_api_account_by_id(account_id);
             if (!acct) {
                 session->status(404);
@@ -273,22 +272,59 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
             JsonObject* source = acct->@("source");
 
             I64 fields_attributes_indexes[16];
-            I64 fields_attributes_count = 0;
-            U8* field_name;
-            U8* field_value;
             JsonKey* update_field_index;
             JsonObject* field_object;
-            Bool update_fields_from_form_data = FALSE;
-            Bool integer_is_in_index = FALSE;
 
-            I64 i;
-            I64 index;
             MemSet(fields_attributes_indexes, NULL, sizeof(I64) * 16);
             JsonArray* fields_array = Json.CreateArray();
+            SlonCatboxUpload* cb = NULL;
+            U8* media_id = NULL;
+            U8* media_file_ext = NULL;
+            SlonMultipartFile* file = NULL;
 
             JsonKey* key = request_json->keys;
             while (key) {
-                if (!String.BeginsWith("fields_attributes", key->name) && !String.BeginsWith("source", key->name)) {
+                if (!StrICmp("avatar", key->name)) {
+                    if (key->type == JSON_NUMBER) {
+                        // Write image file to RAM disk
+                        file = key->value;
+                        media_id = @slon_api_generate_unique_id(session);
+                        media_file_ext = StrFind("/", file->content_type) + 1;
+                        StrPrint(scratch_buffer, "%s/%s.%s", SLON_MEDIA_PATH, media_id, media_file_ext);
+                        FileWrite(scratch_buffer, file->buffer, file->size);
+                        @slon_free(session, media_id);
+                        // Then, async upload the image file to Catbox
+                        cb = CAlloc(sizeof(SlonCatboxUpload), adam_task);
+                        cb->key = acct->@("avatar", TRUE);
+                        cb->filepath = StrNew(scratch_buffer, adam_task);
+                        cb->callback = &@slon_db_actors_update_user;
+                        cb->callback_arg = acct;
+                        Spawn(&@slon_api_async_upload_to_catbox, cb, "SlonAsyncCatboxUpload");
+                    } else {
+                        acct->set("avatar", key->value, key->type);
+                        acct->set("avatar_static", key->value, key->type);
+                    }
+                } else if (!StrICmp("header", key->name)) {
+                    if (key->type == JSON_NUMBER) {
+                        // Write image file to RAM disk
+                        file = key->value;
+                        media_id = @slon_api_generate_unique_id(session);
+                        media_file_ext = StrFind("/", file->content_type) + 1;
+                        StrPrint(scratch_buffer, "%s/%s.%s", SLON_MEDIA_PATH, media_id, media_file_ext);
+                        FileWrite(scratch_buffer, file->buffer, file->size);
+                        @slon_free(session, media_id);
+                        // Then, async upload the image file to Catbox
+                        cb = CAlloc(sizeof(SlonCatboxUpload), adam_task);
+                        cb->key = acct->@("header", TRUE);
+                        cb->filepath = StrNew(scratch_buffer, adam_task);
+                        cb->callback = &@slon_db_actors_update_user;
+                        cb->callback_arg = acct;
+                        Spawn(&@slon_api_async_upload_to_catbox, cb, "SlonAsyncCatboxUpload");
+                    } else {
+                        acct->set("header", key->value, key->type);
+                        acct->set("header_static", key->value, key->type);
+                    }
+                } else if (!String.BeginsWith("fields_attributes", key->name) && !String.BeginsWith("source", key->name)) {
                     if (@slon_api_v1_accounts_key_is_boolean(key->name)) {
                         switch (key->type) {
                         case JSON_STRING:
@@ -308,26 +344,6 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
                     if (!StrICmp("source[privacy]", key->name)) {
                         source->set("privacy", key->value);
                     }
-                } else if (String.BeginsWith("fields_attributes[", key->name)) {
-                    // Get fields indexes from form data
-                    update_fields_from_form_data = TRUE;
-                    index = Str2I64(key->name + StrLen("fields_attributes["));
-                    if (!fields_attributes_count) {
-                        fields_attributes_indexes[fields_attributes_count] = index;
-                        ++fields_attributes_count;
-                    } else {
-                        integer_is_in_index = FALSE;
-                        i = 0;
-                        while (i < fields_attributes_count) {
-                            if (index == fields_attributes_indexes[i])
-                                integer_is_in_index = TRUE;
-                            ++i;
-                        }
-                        if (!integer_is_in_index) {
-                            fields_attributes_indexes[fields_attributes_count] = index;
-                            ++fields_attributes_count;
-                        }
-                    }
                 } else if (!StrICmp("fields_attributes", key->name)) {
                     // Get fields data from JSON object
                     AdamLog("let's get fields data from JSON object!!\n");
@@ -345,40 +361,9 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
                 key = key->next;
             }
 
-            if (update_fields_from_form_data) {
-                for (i = 0; i < fields_attributes_count; i++) {
-                    index = fields_attributes_indexes[i];
-                    field_name = NULL;
-                    field_value = NULL;
-                    key = request_json->keys;
-                    while (key) {
-                        StrPrint(scratch_buffer, "fields_attributes[%d][name]", index);
-                        if (String.BeginsWith(scratch_buffer, key->name)) {
-                            field_name = key->value;
-                        }
-                        StrPrint(scratch_buffer, "fields_attributes[%d][value]", index);
-                        if (String.BeginsWith(scratch_buffer, key->name)) {
-                            field_value = key->value;
-                        }
-                        if (field_name && field_value) {
-                            // create new field_object, and append to acct->fields
-                            field_object = Json.CreateObject();
-                            field_object->set("name", field_name, JSON_STRING);
-                            field_object->set("value", field_value, JSON_STRING);
-                            field_object->set("verified_at", NULL, JSON_NULL);
-                            fields_array->append(Json.CreateItem(field_object, JSON_OBJECT));
-                            field_name = NULL;
-                            field_value = NULL;
-                        }
-                        key = key->next;
-                    }
-                }
-            }
-
             acct->set("fields", fields_array, JSON_ARRAY);
             source->set("fields", acct->@("fields"), JSON_ARRAY);
 
-            @slon_db_save_accounts_to_disk;
             @slon_db_actors_update_user(acct);
             session->send(acct);
         } else {

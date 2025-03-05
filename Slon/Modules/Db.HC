@@ -351,6 +351,10 @@ U0 @slon_db_instance_increment_status_count()
 
 U0 @slon_db_actors_update_user(JsonObject* acct)
 {
+    acct->set("avatar_static", acct->@("avatar"));
+    acct->set("header_static", acct->@("header"));
+    @slon_db_save_accounts_to_disk;
+
     JsonObject* actors = db->o("actors");
     JsonObject* actor = actors->o(acct->@("username"));
 
