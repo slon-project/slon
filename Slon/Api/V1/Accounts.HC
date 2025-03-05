@@ -158,40 +158,42 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
     JsonObject* acct = NULL;
     if (!StrICmp("relationships", session->path(3))) {
         if (@slon_api_authorized(session)) {
-            // FIXME: handle array of id[]=
-
             JsonArray* relationships = Json.CreateArray();
-            if (request_json->@("id%5B%5D")) {
-                JsonObject* target_account = @slon_api_account_by_id(request_json->@("id%5B%5D"));
-                if (target_account) {
-                    Bool followed_by = FALSE;
-                    Bool following = FALSE;
-                    if (target_account->@("remote_actor")) {
-                        JsonObject* my_account = @slon_api_account_by_id(Json.Get(session->auth, "account_id"));
-                        JsonArray* my_followers = db->o("followers")->a(my_account->@("username"));
-                        if (my_followers) {
-                            for (i = 0; i < my_followers->length; i++) {
-                                if (my_followers->@(i) && !StrICmp(my_followers->@(i), target_account->@("remote_actor"))) {
-                                    followed_by = TRUE;
-                                    break;
+            JsonArray* relationship_of_ids = request_json->@("id");
+            JsonObject* target_account = NULL;
+            if (relationship_of_ids) {
+                for (i = 0; i < relationship_of_ids->length; i++) {
+                    target_account = @slon_api_account_by_id(relationship_of_ids->@(i));
+                    if (target_account) {
+                        Bool followed_by = FALSE;
+                        Bool following = FALSE;
+                        if (target_account->@("remote_actor")) {
+                            JsonObject* my_account = @slon_api_account_by_id(Json.Get(session->auth, "account_id"));
+                            JsonArray* my_followers = db->o("followers")->a(my_account->@("username"));
+                            if (my_followers) {
+                                for (i = 0; i < my_followers->length; i++) {
+                                    if (my_followers->@(i) && !StrICmp(my_followers->@(i), target_account->@("remote_actor"))) {
+                                        followed_by = TRUE;
+                                        break;
+                                    }
+                                }
+                            }
+                            JsonArray* my_following = db->o("following")->a(my_account->@("username"));
+                            if (my_following) {
+                                for (i = 0; i < my_following->length; i++) {
+                                    if (my_following->@(i) && !StrICmp(my_following->@(i), target_account->@("remote_actor"))) {
+                                        following = TRUE;
+                                        break;
+                                    }
                                 }
                             }
                         }
-                        JsonArray* my_following = db->o("following")->a(my_account->@("username"));
-                        if (my_following) {
-                            for (i = 0; i < my_following->length; i++) {
-                                if (my_following->@(i) && !StrICmp(my_following->@(i), target_account->@("remote_actor"))) {
-                                    following = TRUE;
-                                    break;
-                                }
-                            }
-                        }
+                        JsonObject* relationship = @slon_accounts_default_relationship_object;
+                        relationship->set("id", target_account->@("id"), JSON_STRING);
+                        relationship->set("following", following, JSON_BOOLEAN);
+                        relationship->set("followed_by", followed_by, JSON_BOOLEAN);
+                        relationships->append(Json.CreateItem(relationship, JSON_OBJECT));
                     }
-                    JsonObject* relationship = @slon_accounts_default_relationship_object;
-                    relationship->set("id", target_account->@("id"), JSON_STRING);
-                    relationship->set("following", following, JSON_BOOLEAN);
-                    relationship->set("followed_by", followed_by, JSON_BOOLEAN);
-                    relationships->append(Json.CreateItem(relationship, JSON_OBJECT));
                 }
             }
 
