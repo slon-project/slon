@@ -1,22 +1,6 @@
 U0 (*@slon_api_status_create_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_delete_fedi)(JsonObject* status) = NULL;
 
-JsonObject* @slon_api_v1_statuses_lookup_by_id(U8* id, JsonArray* statuses)
-{
-    if (!id || !statuses) {
-        return NULL;
-    }
-    I64 i;
-    JsonObject* status;
-    for (i = 0; i < statuses->length; i++) {
-        status = statuses->@(i);
-        if (status->@("id") && !StrICmp(status->@("id"), id)) {
-            return status;
-        }
-    }
-    return NULL;
-}
-
 JsonArray* @slon_api_v1_statuses_lookup_descendants_by_id(U8* id, JsonArray* statuses)
 {
     if (!id || !statuses) {
@@ -32,33 +16,6 @@ JsonArray* @slon_api_v1_statuses_lookup_descendants_by_id(U8* id, JsonArray* sta
         }
     }
     return arr;
-}
-
-JsonObject* @slon_api_v1_statuses_find_by_id(U8* id, U8* account_id)
-{
-    if (!id) {
-        return NULL;
-    }
-    JsonObject* status = NULL;
-    // Lookup in public timeline
-    status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->a("public"));
-    if (status) {
-        return status;
-    }
-    if (!account_id) {
-        return NULL;
-    }
-    // Then, lookup in home timeline
-    status = @slon_api_v1_statuses_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
-    if (status) {
-        return status;
-    }
-    // Finally, lookup in account's statuses
-    status = @slon_api_v1_statuses_lookup_by_id(id, db->o("statuses")->a(account_id));
-    if (status) {
-        return status;
-    }
-    return NULL;
 }
 
 JsonArray* @slon_api_v1_statuses_find_descendants_by_id(U8* id, U8* account_id)
@@ -243,10 +200,10 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
 
             // Get ancestors
             id = session->path(3);
-            status = @slon_api_v1_statuses_find_by_id(id, account_id);
+            status = @slon_api_find_status_by_id(id, account_id);
             while (status && status->@("in_reply_to_id")) {
                 id = status->@("in_reply_to_id");
-                status = @slon_api_v1_statuses_find_by_id(id, account_id);
+                status = @slon_api_find_status_by_id(id, account_id);
                 if (status) {
                     context->a("ancestors")->append(Json.CreateItem(status, JSON_OBJECT));
                 }
@@ -260,14 +217,14 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
             return;
         }
 
-        status = @slon_api_v1_statuses_find_by_id(id, account_id);
+        status = @slon_api_find_status_by_id(id, account_id);
         if (status) {
             session->send(status);
             return;
         }
         session->status(404);
     } else {
-        status = @slon_api_v1_statuses_find_by_id(id, NULL);
+        status = @slon_api_find_status_by_id(id, NULL);
         if (status) {
             session->send(status);
             return;

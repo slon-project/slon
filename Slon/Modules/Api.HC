@@ -12,6 +12,13 @@ class SlonCatboxUpload {
 
 Bool @slon_api_authorized(SlonHttpSession* session)
 {
+    U8* whitelist_ip = db->o("settings")->@("whitelist_ip");
+    if (!whitelist_ip) {
+        return FALSE;
+    }
+    if (StrICmp(session->header("x-forwarded-for"), whitelist_ip)) {
+        return FALSE;
+    }
     return session->auth > 0;
 }
 
@@ -290,4 +297,47 @@ U0 @slon_api_async_delete_from_catbox(U8* filename)
     Free(payload);
     Free(headers);
     Free(filename);
+}
+
+JsonObject* @slon_api_status_lookup_by_id(U8* id, JsonArray* statuses)
+{
+    if (!id || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (status->@("id") && !StrICmp(status->@("id"), id)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id)
+{
+    if (!id) {
+        return NULL;
+    }
+    JsonObject* status = NULL;
+    // Lookup in public timeline
+    status = @slon_api_status_lookup_by_id(id, db->o("timelines")->a("public"));
+    if (status) {
+        return status;
+    }
+    if (!account_id) {
+        return NULL;
+    }
+    // Then, lookup in home timeline
+    status = @slon_api_status_lookup_by_id(id, db->o("timelines")->o("home")->a(account_id));
+    if (status) {
+        return status;
+    }
+    // Finally, lookup in account's statuses
+    status = @slon_api_status_lookup_by_id(id, db->o("statuses")->a(account_id));
+    if (status) {
+        return status;
+    }
+    return NULL;
 }
