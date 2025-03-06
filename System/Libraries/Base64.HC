@@ -18,7 +18,7 @@ U8* @base64_decode(U8* input, I64* output_length)
     }
 
     // Allocate memory for the decoded data
-    U8* decoded_data = CAlloc(*output_length, adam_task);
+    U8* decoded_data = CAlloc(*output_length, slon_mem_task);
     if (decoded_data == NULL) {
         return NULL; // Memory allocation failed
     }
@@ -70,7 +70,7 @@ U8* @base64_encode(U8* input, I64 input_length)
     I64 i;
     U8 buf[3];
     I64 c = 0;
-    U8* output = CAlloc(input_length * 2, adam_task);
+    U8* output = CAlloc(input_length * 2, slon_mem_task);
 
     for (i = 0; i < input_length; i += 3) {
         buf[0] = input[i];

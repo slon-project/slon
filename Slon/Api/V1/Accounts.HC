@@ -296,9 +296,9 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
                         FileWrite(scratch_buffer, file->buffer, file->size);
                         @slon_free(session, media_id);
                         // Then, async upload the image file to Catbox
-                        cb = CAlloc(sizeof(SlonCatboxUpload), adam_task);
+                        cb = CAlloc(sizeof(SlonCatboxUpload), slon_mem_task);
                         cb->key = acct->@("avatar", TRUE);
-                        cb->filepath = StrNew(scratch_buffer, adam_task);
+                        cb->filepath = StrNew(scratch_buffer, slon_mem_task);
                         cb->callback = &@slon_db_actors_update_user;
                         cb->callback_arg = acct;
                         Spawn(&@slon_api_async_upload_to_catbox, cb, "SlonAsyncCatboxUpload");
@@ -316,9 +316,9 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
                         FileWrite(scratch_buffer, file->buffer, file->size);
                         @slon_free(session, media_id);
                         // Then, async upload the image file to Catbox
-                        cb = CAlloc(sizeof(SlonCatboxUpload), adam_task);
+                        cb = CAlloc(sizeof(SlonCatboxUpload), slon_mem_task);
                         cb->key = acct->@("header", TRUE);
-                        cb->filepath = StrNew(scratch_buffer, adam_task);
+                        cb->filepath = StrNew(scratch_buffer, slon_mem_task);
                         cb->callback = &@slon_db_actors_update_user;
                         cb->callback_arg = acct;
                         Spawn(&@slon_api_async_upload_to_catbox, cb, "SlonAsyncCatboxUpload");

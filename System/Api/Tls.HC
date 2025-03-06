@@ -50,13 +50,13 @@ U0 @tls12_connect(TlsSocket* s)
 TlsSocket* @tls_socket_create(U8* server_name, U64 port = 443)
 {
     U64 addr = @dns_query(server_name);
-    TlsSocket* s = CAlloc(sizeof(TlsSocket), adam_task->code_heap);
+    TlsSocket* s = CAlloc(sizeof(TlsSocket), slon_mem_task->code_heap);
     s->remote_addr = addr;
     s->remote_port = port;
 
     U64 a;
 
-    s->close = MAlloc(16, adam_task->code_heap);
+    s->close = MAlloc(16, slon_mem_task->code_heap);
     MemCpy(s->close, @tcp_close_wrapper_function, 16);
     a = s->close;
     a += 0x05;
@@ -65,7 +65,7 @@ TlsSocket* @tls_socket_create(U8* server_name, U64 port = 443)
     a += 0x09;
     @patch_call_rel32(a, &@tcp_socket_close);
 
-    s->receive = MAlloc(25, adam_task->code_heap);
+    s->receive = MAlloc(25, slon_mem_task->code_heap);
     MemCpy(s->receive, @tcp_receive_wrapper_function, 32);
     a = s->receive;
     a += 0x11;
@@ -74,7 +74,7 @@ TlsSocket* @tls_socket_create(U8* server_name, U64 port = 443)
     a += 0x15;
     @patch_call_rel32(a, &@tls_socket_receive);
 
-    s->send = MAlloc(32, adam_task->code_heap);
+    s->send = MAlloc(32, slon_mem_task->code_heap);
     MemCpy(s->send, @tcp_send_wrapper_function, 32);
     a = s->send;
     a += 0x11;
@@ -92,7 +92,7 @@ TlsSocket* @tls_socket_create(U8* server_name, U64 port = 443)
         Sleep(1);
 
     s->ctx = @tls_create_context(0, TLS_V12);
-    @tls_sni_set(s->ctx, StrNew(server_name, adam_task->code_heap));
+    @tls_sni_set(s->ctx, StrNew(server_name, slon_mem_task->code_heap));
     Spawn(&@tls12_connect, s, , , , TLS_CONNECT_TASK_STACK_SIZE);
 
     return s;

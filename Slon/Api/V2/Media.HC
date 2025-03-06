@@ -51,9 +51,9 @@ U0 @slon_api_v2_media_post(SlonHttpSession* session)
         db->o("media")->set(media_id, media_object, JSON_OBJECT);
 
         // Then, async upload the image file to Catbox
-        SlonCatboxUpload* cb = CAlloc(sizeof(SlonCatboxUpload), adam_task);
+        SlonCatboxUpload* cb = CAlloc(sizeof(SlonCatboxUpload), slon_mem_task);
         cb->key = media_object->@("url", TRUE);
-        cb->filepath = StrNew(scratch_buffer, adam_task);
+        cb->filepath = StrNew(scratch_buffer, slon_mem_task);
         Spawn(&@slon_api_async_upload_to_catbox, cb, "SlonAsyncCatboxUpload");
 
         session->send(media_object);

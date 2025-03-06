@@ -181,7 +181,7 @@ U8* @json_string_from_fifo(CFifoU8* f)
 {
     U8 ch;
     I64 i = 0;
-    U8* str = CAlloc(FifoU8Cnt(f) + 1, adam_task);
+    U8* str = CAlloc(FifoU8Cnt(f) + 1, slon_mem_task);
     while (FifoU8Cnt(f)) {
         FifoU8Rem(f, &ch);
         str[i] = ch;
@@ -413,7 +413,7 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
                 parser->state = JSON_STATE_OBJECT_SEPARATOR;
                 break;
             case JSON_STATE_OBJECT:
-                key = CAlloc(sizeof(@json_key), adam_task);
+                key = CAlloc(sizeof(@json_key), slon_mem_task);
                 key->sig = JSON_SIG;
                 parser->state = JSON_STATE_OBJECT_KEY;
                 break;
@@ -498,7 +498,7 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 return;
                 break;
             }
-            item = CAlloc(sizeof(@json_item), adam_task);
+            item = CAlloc(sizeof(@json_item), slon_mem_task);
             item->sig = JSON_SIG;
             parser->state = JSON_STATE_ARRAY_TYPE;
         }
@@ -707,7 +707,7 @@ extern @json_callable_object* @json_create_callable_object(@json_object* obj);
 
 @json_element* @json_parse_object_or_array(@json_parser* parser)
 {
-    @json_element* el = CAlloc(sizeof(@json_element) * 2, adam_task);
+    @json_element* el = CAlloc(sizeof(@json_element) * 2, slon_mem_task);
     el->sig = JSON_SIG;
     while (1) {
         switch (parser->stream[parser->pos]) {
@@ -747,8 +747,8 @@ extern @json_callable_object* @json_create_callable_object(@json_object* obj);
 
 @json_element* @json_parse(U8* str)
 {
-    @json_parser* parser = CAlloc(sizeof(@json_parser), adam_task);
-    parser->consumed = FifoU8New(JSON_PARSER_FIFO_SIZE, adam_task);
+    @json_parser* parser = CAlloc(sizeof(@json_parser), slon_mem_task);
+    parser->consumed = FifoU8New(JSON_PARSER_FIFO_SIZE, slon_mem_task);
     // parser->debug = TRUE;
     parser->stream = str;
     @json_element* root = @json_parse_object_or_array(parser);
@@ -1006,9 +1006,9 @@ U0 @json_stringify_object_or_array(@json_stringify_string* str, @json_element* e
 
 U8* @json_stringify(@json_element* el, I64 buf_size = JSON_STRINGIFY_BUF_SIZE)
 {
-    // U8* str = CAlloc(buf_size, adam_task);
-    @json_stringify_string* str = CAlloc(sizeof(@json_stringify_string), adam_task);
-    U8* value = CAlloc(buf_size, adam_task);
+    // U8* str = CAlloc(buf_size, slon_mem_task);
+    @json_stringify_string* str = CAlloc(sizeof(@json_stringify_string), slon_mem_task);
+    U8* value = CAlloc(buf_size, slon_mem_task);
     str->value = value;
     @json_stringify_object_or_array(str, el);
     Free(str);
@@ -1049,12 +1049,12 @@ U0 @json_set(@json_object* obj, U8* key, U64 value, I64 type = JSON_SAME)
         }
         iter_key = iter_key->next;
     }
-    @json_key* new_key = CAlloc(sizeof(@json_key), adam_task);
+    @json_key* new_key = CAlloc(sizeof(@json_key), slon_mem_task);
     new_key->sig = JSON_SIG;
-    new_key->name = StrNew(key, adam_task);
+    new_key->name = StrNew(key, slon_mem_task);
     new_key->type = type;
     if (new_key->type == JSON_STRING)
-        new_key->value = StrNew(value, adam_task);
+        new_key->value = StrNew(value, slon_mem_task);
     else
         new_key->value = value;
     @json_insert_key(obj, new_key);
@@ -1102,14 +1102,14 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 @json_callable_object* @json_create_callable_object(@json_object* obj)
 {
     // Alloc callable object and copy instance
-    @json_callable_object* cobj = CAlloc(sizeof(@json_callable_object), adam_task);
+    @json_callable_object* cobj = CAlloc(sizeof(@json_callable_object), slon_mem_task);
     cobj->sig = JSON_SIG;
     MemCpy(cobj, obj, sizeof(@json_object));
 
     // Create a copy of function and patch Get
     U64 a;
     I64 code_size = MSize(&@json_callable_object_get_wrapper_function);
-    cobj->@ = CAlloc(code_size, adam_task->code_heap);
+    cobj->@ = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(cobj->@, &@json_callable_object_get_wrapper_function, code_size);
 
     a = cobj->@;
@@ -1122,7 +1122,7 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
     // Create a copy of function and patch Set
     code_size = MSize(&@json_callable_object_set_wrapper_function);
-    cobj->set = CAlloc(code_size, adam_task->code_heap);
+    cobj->set = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(cobj->set, &@json_callable_object_set_wrapper_function, code_size);
 
     a = cobj->set;
@@ -1135,7 +1135,7 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
     // Create a copy of function and patch Unset
     code_size = MSize(&@json_callable_object_unset_wrapper_function);
-    cobj->unset = CAlloc(code_size, adam_task->code_heap);
+    cobj->unset = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(cobj->unset, &@json_callable_object_unset_wrapper_function, code_size);
 
     a = cobj->unset;
@@ -1154,7 +1154,7 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
 @json_callable_object* @json_create_object()
 {
-    @json_object* obj = CAlloc(sizeof(@json_object), adam_task);
+    @json_object* obj = CAlloc(sizeof(@json_object), slon_mem_task);
     obj->sig = JSON_SIG;
     obj->type = JSON_OBJECT;
     return @json_create_callable_object(obj);
@@ -1162,11 +1162,11 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
 @json_item* @json_create_item(U64 value, I64 type)
 {
-    @json_item* item = CAlloc(sizeof(@json_item), adam_task);
+    @json_item* item = CAlloc(sizeof(@json_item), slon_mem_task);
     item->sig = JSON_SIG;
     item->type = type;
     if (item->type == JSON_STRING)
-        item->value = StrNew(value, adam_task);
+        item->value = StrNew(value, slon_mem_task);
     else
         item->value = value;
     return item;
@@ -1259,14 +1259,14 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 @json_callable_array* @json_create_callable_array(@json_array* arr)
 {
     // Alloc callable object and copy instance
-    @json_callable_array* carr = CAlloc(sizeof(@json_callable_array), adam_task);
+    @json_callable_array* carr = CAlloc(sizeof(@json_callable_array), slon_mem_task);
     carr->sig = JSON_SIG;
     MemCpy(carr, arr, sizeof(@json_array));
 
     // Create a copy of function and patch Index
     U64 a;
     I64 code_size = MSize(&@json_callable_array_index_wrapper_function);
-    carr->@ = CAlloc(code_size, adam_task->code_heap);
+    carr->@ = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(carr->@, &@json_callable_array_index_wrapper_function, code_size);
 
     a = carr->@;
@@ -1282,7 +1282,7 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 
     // Create a copy of function and patch Append
     code_size = MSize(&@json_callable_array_append_wrapper_function);
-    carr->append = CAlloc(code_size, adam_task->code_heap);
+    carr->append = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(carr->append, &@json_callable_array_append_wrapper_function, code_size);
 
     a = carr->append;
@@ -1295,7 +1295,7 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 
     // Create a copy of function and patch Prepend
     code_size = MSize(&@json_callable_array_prepend_wrapper_function);
-    carr->prepend = CAlloc(code_size, adam_task->code_heap);
+    carr->prepend = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(carr->prepend, &@json_callable_array_prepend_wrapper_function, code_size);
 
     a = carr->prepend;
@@ -1308,7 +1308,7 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 
     // Create a copy of function and patch Insert
     code_size = MSize(&@json_callable_array_insert_wrapper_function);
-    carr->insert = CAlloc(code_size, adam_task->code_heap);
+    carr->insert = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(carr->insert, &@json_callable_array_insert_wrapper_function, code_size);
 
     a = carr->insert;
@@ -1321,7 +1321,7 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 
     // Create a copy of function and patch Remove
     code_size = MSize(&@json_callable_array_remove_wrapper_function);
-    carr->remove = CAlloc(code_size, adam_task->code_heap);
+    carr->remove = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(carr->remove, &@json_callable_array_remove_wrapper_function, code_size);
 
     a = carr->remove;
@@ -1337,7 +1337,7 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 
 @json_array* @json_create_array()
 {
-    @json_array* arr = CAlloc(sizeof(@json_array), adam_task);
+    @json_array* arr = CAlloc(sizeof(@json_array), slon_mem_task);
     arr->sig = JSON_SIG;
     arr->type = JSON_ARRAY;
     return @json_create_callable_array(arr);

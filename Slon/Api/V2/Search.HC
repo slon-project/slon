@@ -27,7 +27,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
         return NULL;
     }
 
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     JsonObject* http_headers = Json.CreateObject();
     http_headers->set("accept", "application/json", JSON_STRING);
     @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
@@ -78,7 +78,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
     }
 
     // We have the remote actor uri, let's fetch and create a local account
-    fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     U8* signatory = db->o("actors")->o(@slon_api_account_by_id(account_id)->@("username"))->@("id");
     resp = @slon_activitypub_signed_request(remote_actor, fetch_buffer, NULL, SLON_HTTP_VERB_GET, signatory);
 

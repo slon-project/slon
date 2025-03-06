@@ -60,8 +60,8 @@ U0 md5(U8* initial_msg, U32 initial_len, U32* md5_h)
         ;
     new_len /= 8;
 
-    msg = CAlloc(new_len + 64, adam_task); // also appends "0" bits
-                                           // (we alloc also 64 extra bytes...)
+    msg = CAlloc(new_len + 64, slon_mem_task); // also appends "0" bits
+                                               // (we alloc also 64 extra bytes...)
     MemCpy(msg, initial_msg, initial_len);
     msg[initial_len] = 128; // write the "1" bit
 
@@ -131,7 +131,7 @@ U8* md5_string(U8* buf, I64 size)
 {
     U32 md5_h[4];
     md5(buf, size, &md5_h[0]);
-    U8* str = CAlloc(33, adam_task);
+    U8* str = CAlloc(33, slon_mem_task);
     StrPrint(str + StrLen(str), "%02x%02x%02x%02x", md5_h[0].u8[0],
         md5_h[0].u8[1], md5_h[0].u8[2], md5_h[0].u8[3]);
     StrPrint(str + StrLen(str), "%02x%02x%02x%02x", md5_h[1].u8[0],

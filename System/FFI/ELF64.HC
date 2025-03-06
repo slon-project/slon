@@ -244,7 +244,7 @@ U0 process_elf_rela_plt_entries(Elf* elf)
     for (i = 0; i < elf->rela_plt_size; i++) {
         symbol_exists = FALSE;
         entry_name = elf->dynstr + elf->dynsym[(rela_plt->r_info >> 32)].st_name;
-        handler = MAlloc(sizeof(unimplemented_symbol), adam_task->code_heap);
+        handler = MAlloc(sizeof(unimplemented_symbol), slon_mem_task->code_heap);
         MemCpy(handler, &unimplemented_symbol, sizeof(unimplemented_symbol));
         patch = handler + 0x0A;
         *patch = entry_name;

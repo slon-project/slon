@@ -109,7 +109,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
         U8* signatory_url_string = @slon_strnew(session, keyId);
         StrFind("#", signatory_url_string)[0] = NULL;
 
-        U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+        U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
         U8* signatory = db->o("actors")->o(user)->@("id");
         @http_response* resp = @slon_activitypub_signed_request(signatory_url_string, fetch_buffer, NULL, SLON_HTTP_VERB_GET, signatory);
         @slon_free(session, signatory_url_string);
@@ -230,7 +230,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
     calc_sha_256(sig_string_hash, sig_string, StrLen(sig_string));
 
     // Import RSA key
-    U64 rsa_key = CAlloc(sizeof(U64) * 32, adam_task);
+    U64 rsa_key = CAlloc(sizeof(U64) * 32, slon_mem_task);
     I64 res = @rsa_import(db->o("public_keys")->o(keyId)->@("key"), db->o("public_keys")->o(keyId)->@("length"), rsa_key);
     if (res != 0) { // CRYPT_OK = 0
         @slon_log(LOG_HTTPD, "Received error from @rsa_import: %d", res);
@@ -348,7 +348,7 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
     I64 res;
 
     // Import RSA key
-    U64 rsa_key = CAlloc(sizeof(U64) * 32, adam_task);
+    U64 rsa_key = CAlloc(sizeof(U64) * 32, slon_mem_task);
     res = @rsa_import(private_key_binary->@("data"), private_key_binary->@("size"), rsa_key);
     AdamLog("@rsa_import: res: %d\n", res);
 
@@ -423,7 +423,7 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
     accept_object->set("actor", this_actor, JSON_STRING);
     accept_object->set("object", request, JSON_OBJECT);
 
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     StrPrint(scratch_buffer, "%s/inbox", o->@("actor_for_key_id"));
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, accept_object);
     Free(fetch_buffer);
@@ -437,7 +437,7 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
 
     U8 scratch_buffer[2048];
 
-    U8* this_actor = StrNew(status->@("uri"), adam_task);
+    U8* this_actor = StrNew(status->@("uri"), slon_mem_task);
     StrFind("/statuses/", this_actor)[0] = NULL;
 
     JsonObject* create_object = Json.CreateObject();
@@ -505,7 +505,7 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     note_object->set("shares", SLON_EMPTY_JSON_OBJECT, JSON_OBJECT);
 
     create_object->set("object", note_object, JSON_OBJECT);
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     StrPrint(scratch_buffer, "%s/inbox", dest);
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, create_object);
     Free(fetch_buffer);
@@ -532,7 +532,7 @@ U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
     Sleep(1000);
     U8 scratch_buffer[2048];
 
-    U8* this_actor = StrNew(status->@("uri"), adam_task);
+    U8* this_actor = StrNew(status->@("uri"), slon_mem_task);
     StrFind("/statuses/", this_actor)[0] = NULL;
 
     JsonObject* delete_object = Json.CreateObject();
@@ -550,7 +550,7 @@ U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
     ts_object->set("atomUri", status->@("uri"), JSON_STRING);
 
     delete_object->set("object", ts_object, JSON_OBJECT);
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     StrPrint(scratch_buffer, "%s/inbox", dest);
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, delete_object);
     Free(fetch_buffer);
@@ -561,7 +561,7 @@ U0 @slon_activitypub_async_follow(JsonObject* follow)
 {
     Sleep(1000);
     U8 scratch_buffer[1024];
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     StrPrint(scratch_buffer, "%s/inbox", follow->@("object"));
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, follow);
     Free(fetch_buffer);
@@ -618,7 +618,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
         return NULL;
     }
 
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     JsonObject* http_headers = Json.CreateObject();
     http_headers->set("accept", "application/json", JSON_STRING);
     @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);

@@ -112,13 +112,13 @@ U0 @tcp_socket_close(TcpSocket* s)
 TcpSocket* @tcp_socket_create(U8* host, U64 port)
 {
     U64 addr = @dns_query(host);
-    TcpSocket* s = CAlloc(sizeof(TcpSocket), adam_task->code_heap);
+    TcpSocket* s = CAlloc(sizeof(TcpSocket), slon_mem_task->code_heap);
     s->remote_addr = addr;
     s->remote_port = port;
 
     U64 a;
 
-    s->close = MAlloc(16, adam_task->code_heap);
+    s->close = MAlloc(16, slon_mem_task->code_heap);
     MemCpy(s->close, @tcp_close_wrapper_function, 16);
     a = s->close;
     a += 0x05;
@@ -127,7 +127,7 @@ TcpSocket* @tcp_socket_create(U8* host, U64 port)
     a += 0x09;
     @patch_call_rel32(a, &@tcp_socket_close);
 
-    s->receive = MAlloc(25, adam_task->code_heap);
+    s->receive = MAlloc(25, slon_mem_task->code_heap);
     MemCpy(s->receive, @tcp_receive_wrapper_function, 32);
     a = s->receive;
     a += 0x11;
@@ -136,7 +136,7 @@ TcpSocket* @tcp_socket_create(U8* host, U64 port)
     a += 0x15;
     @patch_call_rel32(a, &@tcp_socket_receive);
 
-    s->send = MAlloc(32, adam_task->code_heap);
+    s->send = MAlloc(32, slon_mem_task->code_heap);
     MemCpy(s->send, @tcp_send_wrapper_function, 32);
     a = s->send;
     a += 0x11;
@@ -157,7 +157,7 @@ U64 @tcp_socket_bind(U64 port, U64 function)
     if (!port || !function)
         return NULL;
 
-    TcpBind* b = CAlloc(sizeof(TcpBind), adam_task->code_heap);
+    TcpBind* b = CAlloc(sizeof(TcpBind), slon_mem_task->code_heap);
     b->port = port;
     b->function = function; // U0 my_spawn_wrapper_function(TcpSocket* s)
 
@@ -179,7 +179,7 @@ TcpSocket* @tcp_socket_accept(TcpSocket* s)
 
     U64 a;
 
-    s->close = MAlloc(16, adam_task->code_heap);
+    s->close = MAlloc(16, slon_mem_task->code_heap);
     MemCpy(s->close, @tcp_close_wrapper_function, 16);
     a = s->close;
     a += 0x05;
@@ -188,7 +188,7 @@ TcpSocket* @tcp_socket_accept(TcpSocket* s)
     a += 0x09;
     @patch_call_rel32(a, &@tcp_socket_close);
 
-    s->receive = MAlloc(25, adam_task->code_heap);
+    s->receive = MAlloc(25, slon_mem_task->code_heap);
     MemCpy(s->receive, @tcp_receive_wrapper_function, 32);
     a = s->receive;
     a += 0x11;
@@ -197,7 +197,7 @@ TcpSocket* @tcp_socket_accept(TcpSocket* s)
     a += 0x15;
     @patch_call_rel32(a, &@tcp_socket_receive);
 
-    s->send = MAlloc(32, adam_task->code_heap);
+    s->send = MAlloc(32, slon_mem_task->code_heap);
     MemCpy(s->send, @tcp_send_wrapper_function, 32);
     a = s->send;
     a += 0x11;

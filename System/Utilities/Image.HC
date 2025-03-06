@@ -288,7 +288,7 @@ U32* @image_get_rgba_buffer_from_dc_body(CDC* dc)
 {
     if (!dc)
         return NULL;
-    U32* pixels = CAlloc((dc->width * dc->height) * 4, adam_task);
+    U32* pixels = CAlloc((dc->width * dc->height) * 4, slon_mem_task);
     I64 x;
     I64 y;
     I64 p = 0;
@@ -368,12 +368,12 @@ CDC* @image_from_buffer(U8* buffer, I64 len)
         PopUpOk(@stbi_failure_reason);
     if (!z)
         return NULL; // no frames?
-    @image_collection* collection = CAlloc(sizeof(@image_collection), adam_task);
+    @image_collection* collection = CAlloc(sizeof(@image_collection), slon_mem_task);
     @image_frame* frame;
-    collection->frames = CAlloc(sizeof(@image_frame*) * z, adam_task);
+    collection->frames = CAlloc(sizeof(@image_frame*) * z, slon_mem_task);
     collection->count = z;
     for (i = 0; i < z; i++) {
-        frame = CAlloc(sizeof(@image_frame), adam_task);
+        frame = CAlloc(sizeof(@image_frame), slon_mem_task);
         frame->dc = @image_generate_dc_from_pixels(pixels, x, y);
         frame->sprite = DC2Sprite(frame->dc);
         frame->delay = delays[i];

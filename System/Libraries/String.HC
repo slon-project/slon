@@ -8,7 +8,7 @@ U0 @string_append(U8* dst, U8* fmt, ...)
     if (argc) {
         buf = StrPrintJoin(NULL, fmt, argc, argv);
     } else {
-        buf = StrNew(fmt, adam_task);
+        buf = StrNew(fmt, slon_mem_task);
     }
     U8* src = buf;
     StrCpy(dst + StrLen(dst), src);
@@ -53,7 +53,7 @@ Bool @string_ends_with(U8* fragment, U8* str)
 U8* @string_replace(U8* s, U8* oldW, U8* newW)
 {
     if (!StrFind(oldW, s)) {
-        return StrNew(s, adam_task);
+        return StrNew(s, slon_mem_task);
     }
     U8* result;
     I64 i, cnt = 0;
@@ -66,7 +66,7 @@ U8* @string_replace(U8* s, U8* oldW, U8* newW)
             i += oldWlen - 1;
         }
     }
-    result = MAlloc(i + cnt * (newWlen - oldWlen) + 1, adam_task);
+    result = MAlloc(i + cnt * (newWlen - oldWlen) + 1, slon_mem_task);
     i = 0;
     while (*s) {
         if (StrFind(oldW, s) == s) {
@@ -85,7 +85,7 @@ U8** @string_split(U8* s, U8 ch = '\n', I64* cnt)
     U8 check_buf[4];
     StrPrint(check_buf, "%c", ch);
     if (!StrFind(check_buf, s)) {
-        U8** same_arr = CAlloc(sizeof(U8*) * 1, adam_task);
+        U8** same_arr = CAlloc(sizeof(U8*) * 1, slon_mem_task);
         same_arr[0] = s;
         *cnt = 1;
         return same_arr;
@@ -101,7 +101,7 @@ U8** @string_split(U8* s, U8 ch = '\n', I64* cnt)
         return NULL;
     cnt[0]++;
     I64 i = -1;
-    U8** arr = CAlloc(sizeof(U8*) * cnt[0], adam_task);
+    U8** arr = CAlloc(sizeof(U8*) * cnt[0], slon_mem_task);
     p = s;
     while (*p) {
         if (*p == ch || i < 0) {

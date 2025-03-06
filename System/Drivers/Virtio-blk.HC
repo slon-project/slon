@@ -138,7 +138,7 @@ I64 VirtioBlkInit()
     // Set up virt queue
     OutU16(virtio_blk.port + VIRTIO_PCI_QUEUE_SEL, 0);
     virtio_blk.vq_size = InU16(virtio_blk.port + VIRTIO_PCI_QUEUE_SIZE); // 256
-    virtio_blk.vq = CAllocAligned(sizeof(@virtio_queue), 4096, adam_task->code_heap);
+    virtio_blk.vq = CAllocAligned(sizeof(@virtio_queue), 4096, slon_mem_task->code_heap);
     OutU32(virtio_blk.port + VIRTIO_PCI_QUEUE_PFN, virtio_blk.vq / 4096);
 
     // Init OK
@@ -152,7 +152,7 @@ U0 VIOFlush()
 {
     I64 j;
     I64 vq_idx;
-    @virtio_blk_request* brq = CAlloc(sizeof(@virtio_blk_request), adam_task);
+    @virtio_blk_request* brq = CAlloc(sizeof(@virtio_blk_request), slon_mem_task);
     brq->type = VIRTIO_BLK_T_FLUSH;
     brq->sector = NULL;
     vq_idx = virtio_blk.vq->available.index % 256;
@@ -181,7 +181,7 @@ Bool VIORBlks(CDrv* dv, U8* buf, I64 blk, I64 cnt)
     I64 i, j;
     I64 vq_idx;
     U64 addr;
-    @virtio_blk_request* brq = CAlloc(sizeof(@virtio_blk_request), adam_task);
+    @virtio_blk_request* brq = CAlloc(sizeof(@virtio_blk_request), slon_mem_task);
     for (i = 0; i < cnt; i++) {
         brq->type = VIRTIO_BLK_T_IN;
         brq->sector = blk + i;
@@ -218,7 +218,7 @@ Bool VIOWBlks(CDrv* dv, U8* buf, I64 blk, I64 cnt)
     I64 i, j;
     I64 vq_idx;
     U64 addr;
-    @virtio_blk_request* brq = CAlloc(sizeof(@virtio_blk_request), adam_task);
+    @virtio_blk_request* brq = CAlloc(sizeof(@virtio_blk_request), slon_mem_task);
     for (i = 0; i < cnt; i++) {
         brq->type = VIRTIO_BLK_T_OUT;
         brq->sector = blk + i;
@@ -277,7 +277,7 @@ U8 MountVirtioBlk()
 { // Mount Virtio-blk device
     CDrv* dv = DrvMakeFreeSlot(DrvNextFreeLet('A'));
     CBlkDev* bd = BlkDevNextFreeSlot(dv->drv_let, BDT_RAM);
-    CRedSeaBoot* bs = CAlloc(BLK_SIZE, adam_task);
+    CRedSeaBoot* bs = CAlloc(BLK_SIZE, slon_mem_task);
     bd->max_blk = 512;
     BlkDevAdd(bd, , TRUE, TRUE);
     bd->type = BDT_VIRTIO_BLK;

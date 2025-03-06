@@ -39,7 +39,7 @@ U0 _Z16os_device_callocj()
     // os_device_calloc(unsigned int)
     PUSH_SYSV_REGS
     GET_SYSV_ARGS
-    CAllocAligned(p0, 4096, adam_task->code_heap);
+    CAllocAligned(p0, 4096, slon_mem_task->code_heap);
     POP_SYSV_REGS
 }
 
@@ -54,7 +54,7 @@ U0 _Z7os_exitv()
 
 U8* @os_file_picker(U8* path, U8* glob)
 {
-    U8* full_path = CAlloc(StrLen(path) + StrLen(glob) + 4, adam_task);
+    U8* full_path = CAlloc(StrLen(path) + StrLen(glob) + 4, slon_mem_task);
     CatPrint(full_path, "%s/%s", path, glob);
 
     CDirEntry* de = FilesFind(full_path);
@@ -72,7 +72,7 @@ U8* @os_file_picker(U8* path, U8* glob)
         tmpde = tmpde->next;
     }
 
-    file_list = CAlloc(list_size, adam_task);
+    file_list = CAlloc(list_size, slon_mem_task);
 
     tmpde = de;
     while (tmpde) {
@@ -87,13 +87,13 @@ U8* @os_file_picker(U8* path, U8* glob)
 
     if (list_index < 0) {
         DirTreeDel(de);
-        return StrNew("", adam_task);
+        return StrNew("", slon_mem_task);
     }
 
     tmpde = de;
     while (tmpde) {
         if (list_index == list_pos) {
-            selected_file = CAlloc(StrLen(path) + StrLen(tmpde->name) + 4, adam_task);
+            selected_file = CAlloc(StrLen(path) + StrLen(tmpde->name) + 4, slon_mem_task);
             CatPrint(selected_file, "%s/%s", path, tmpde->name);
             break;
         }
@@ -117,7 +117,7 @@ U0 _Z14os_file_pickerPKcS0_()
 
 U8* @os_files_list(U8* path)
 {
-    U8* full_path = CAlloc(StrLen(path) + 4, adam_task);
+    U8* full_path = CAlloc(StrLen(path) + 4, slon_mem_task);
     CatPrint(full_path, "%s", path);
 
     CDirEntry* de = FilesFind(full_path);
@@ -138,7 +138,7 @@ U8* @os_files_list(U8* path)
     if (!list_size)
         return NULL;
 
-    file_list = CAlloc(list_size, adam_task);
+    file_list = CAlloc(list_size, slon_mem_task);
 
     tmpde = de;
     I64 counter = 0;
@@ -243,7 +243,7 @@ U0 _Z19os_read_entire_filePKcPl()
 
 U0 @os_screenshot()
 {
-    CDC* dc = DCScrnCapture(, adam_task);
+    CDC* dc = DCScrnCapture(, slon_mem_task);
     Image.Write("B:/screenshot.png", dc);
     DCDel(dc);
 }
@@ -263,7 +263,7 @@ U8* @os_to_uppercase(U8* instr)
         return NULL;
     if (!StrLen(instr))
         return NULL;
-    U8* outstr = CAlloc(StrLen(instr) + 1, adam_task);
+    U8* outstr = CAlloc(StrLen(instr) + 1, slon_mem_task);
     I64 i;
     for (i = 0; i < StrLen(instr); i++)
         outstr[i] = ToUpper(instr[i]);

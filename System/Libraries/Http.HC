@@ -78,7 +78,7 @@ U8* @http_string_from_fifo(CFifoU8* f)
 {
     U8 ch;
     I64 i = 0;
-    U8* str = CAlloc(FifoU8Cnt(f) + 1, adam_task);
+    U8* str = CAlloc(FifoU8Cnt(f) + 1, slon_mem_task);
     while (FifoU8Cnt(f)) {
         FifoU8Rem(f, &ch);
         str[i] = ch;
@@ -121,22 +121,22 @@ U0 @http_free_response(@http_response* resp)
     U8 hex[3];
     I64 i = 0;
     I64 state = HTTP_PARSE_SCHEME;
-    CFifoU8* consume_fifo = FifoU8New(HTTP_PARSE_URL_FIFO_SIZE, adam_task);
-    @http_url* url = CAlloc(sizeof(@http_url), adam_task);
+    CFifoU8* consume_fifo = FifoU8New(HTTP_PARSE_URL_FIFO_SIZE, slon_mem_task);
+    @http_url* url = CAlloc(sizeof(@http_url), slon_mem_task);
     while (1) {
         switch (str[i]) {
         case 0:
             switch (state) {
             case HTTP_PARSE_HOST:
                 url->host = @http_string_from_fifo(consume_fifo);
-                url->path = StrNew("/", adam_task);
+                url->path = StrNew("/", slon_mem_task);
                 goto done_parsing_url;
                 break;
             case HTTP_PARSE_PORT:
                 buf = @http_string_from_fifo(consume_fifo);
                 url->port = Str2I64(buf);
                 Free(buf);
-                url->path = StrNew("/", adam_task);
+                url->path = StrNew("/", slon_mem_task);
                 goto done_parsing_url;
                 break;
             case HTTP_PARSE_PATH:
@@ -297,9 +297,9 @@ U0 @http_parse_response_headers(@http_response* resp, U8* buffer, I64 length)
     (*StrFind(" ", resp_protocol)) = NULL;
     (*StrFind(" ", resp_status_code)) = NULL;
 
-    resp->status.protocol = StrNew(resp_protocol, adam_task);
+    resp->status.protocol = StrNew(resp_protocol, slon_mem_task);
     resp->status.code = Str2I64(resp_status_code);
-    resp->status.text = StrNew(resp_text, adam_task);
+    resp->status.text = StrNew(resp_text, slon_mem_task);
 
     for (i = 1; i < lines_count; i++) {
         for (j = 0; j < StrLen(lines[i]); j++) {
@@ -308,7 +308,7 @@ U0 @http_parse_response_headers(@http_response* resp, U8* buffer, I64 length)
                 key_ptr = lines[i];
                 value_ptr = lines[i] + j + 2;
                 (*StrFind("\r", value_ptr)) = NULL;
-                Json.Set(headers, key_ptr, StrNew(value_ptr, adam_task), JSON_STRING);
+                Json.Set(headers, key_ptr, StrNew(value_ptr, slon_mem_task), JSON_STRING);
                 goto @http_next_header_line;
             }
         }
@@ -350,9 +350,9 @@ I64 @http_req(@http_request* req)
     I64 cnt = 1;
     I64 len = NULL;
 
-    buf = CAlloc(HTTP_MIN_REQUEST_BUFFER_SIZE, adam_task);
+    buf = CAlloc(HTTP_MIN_REQUEST_BUFFER_SIZE, slon_mem_task);
     if (req->headers) {
-        headers_buf = CAlloc(HTTP_MIN_REQUEST_BUFFER_SIZE, adam_task);
+        headers_buf = CAlloc(HTTP_MIN_REQUEST_BUFFER_SIZE, slon_mem_task);
         JsonKey* key = req->headers->keys;
         while (key) {
             StrPrint(headers_buf + StrLen(headers_buf), "%s: %s\r\n", key->name, key->value);
@@ -467,8 +467,8 @@ Bool @http_scheme_is_https(@http_url* url)
 
 @http_response* @http_get(@http_url* url, U8* buf, U64 return_req = NULL, JsonObject* headers = NULL)
 {
-    @http_response* resp = CAlloc(sizeof(@http_response), adam_task);
-    @http_request* req = CAlloc(sizeof(@http_request), adam_task);
+    @http_response* resp = CAlloc(sizeof(@http_response), slon_mem_task);
+    @http_request* req = CAlloc(sizeof(@http_request), slon_mem_task);
     if (return_req)
         MemCpy(return_req, &req, sizeof(U64));
     req->url = url;
@@ -482,8 +482,8 @@ Bool @http_scheme_is_https(@http_url* url)
 
 @http_response* @http_head(@http_url* url, U8* buf, JsonObject* headers = NULL)
 {
-    @http_response* resp = CAlloc(sizeof(@http_response), adam_task);
-    @http_request* req = CAlloc(sizeof(@http_request), adam_task);
+    @http_response* resp = CAlloc(sizeof(@http_response), slon_mem_task);
+    @http_request* req = CAlloc(sizeof(@http_request), slon_mem_task);
     req->url = url;
     req->buf = buf;
     req->type = HTTP_REQ_HEAD;
@@ -495,8 +495,8 @@ Bool @http_scheme_is_https(@http_url* url)
 
 @http_response* @http_post(@http_url* url, U8* buf, U8* data, JsonObject* headers = NULL)
 {
-    @http_response* resp = CAlloc(sizeof(@http_response), adam_task);
-    @http_request* req = CAlloc(sizeof(@http_request), adam_task);
+    @http_response* resp = CAlloc(sizeof(@http_response), slon_mem_task);
+    @http_request* req = CAlloc(sizeof(@http_request), slon_mem_task);
     req->url = url;
     req->buf = buf;
     req->type = HTTP_REQ_POST;
@@ -509,8 +509,8 @@ Bool @http_scheme_is_https(@http_url* url)
 
 @http_response* @http_put(@http_url* url, U8* buf, U8* data, JsonObject* headers = NULL)
 {
-    @http_response* resp = CAlloc(sizeof(@http_response), adam_task);
-    @http_request* req = CAlloc(sizeof(@http_request), adam_task);
+    @http_response* resp = CAlloc(sizeof(@http_response), slon_mem_task);
+    @http_request* req = CAlloc(sizeof(@http_request), slon_mem_task);
     req->url = url;
     req->buf = buf;
     req->type = HTTP_REQ_PUT;
@@ -558,7 +558,7 @@ U0 @http_cache_resource(U8* src, U8* data, I64 size, U8* cache_directory = HTTP_
 
 U8* @http_get_cached_resource_filename(U8* src, U8* cache_directory = HTTP_CACHE_DIRECTORY)
 {
-    U8* buf = CAlloc(512, adam_task);
+    U8* buf = CAlloc(512, slon_mem_task);
     U8* src_md5 = md5_string(src, StrLen(src));
     StrCpy(buf, cache_directory);
     StrPrint(buf + StrLen(buf), "/%s", src_md5);
@@ -591,7 +591,7 @@ I64 curl(U8* url_string)
 {
     if (!url_string)
         return 0;
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     @http_response* resp = fetch(url_string, fetch_buffer);
     if (!resp)
         return 0;
@@ -614,7 +614,7 @@ I64 download(U8* path, U8* url_string)
 {
     if (!path || !url_string)
         return 0;
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     @http_response* resp = fetch(url_string, fetch_buffer);
     if (!resp)
         return 0;

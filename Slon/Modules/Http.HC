@@ -97,7 +97,7 @@ U64 @slon_calloc(SlonHttpSession* session, I64 size)
 {
     if (!session || !size)
         return NULL;
-    U64 res = CAlloc(size, adam_task);
+    U64 res = CAlloc(size, slon_mem_task);
     session->bytes_used += MSize2(res);
     // AdamLog("@slon_calloc: requested %d, total used: %d\n", MSize2(res), session->bytes_used);
     return res;
@@ -116,7 +116,7 @@ U64 @slon_malloc(SlonHttpSession* session, I64 size)
 {
     if (!session || !size)
         return NULL;
-    U64 res = MAlloc(size, adam_task);
+    U64 res = MAlloc(size, slon_mem_task);
     session->bytes_used += MSize2(res);
     // AdamLog("@slon_malloc: requested %d, total used: %d\n", MSize2(res), session->bytes_used);
     return res;
@@ -126,7 +126,7 @@ U8* @slon_strnew(SlonHttpSession* session, U8* str)
 {
     if (!session || !str)
         return NULL;
-    U8* new = StrNew(str, adam_task);
+    U8* new = StrNew(str, slon_mem_task);
     session->bytes_used += MSize2(new);
     // AdamLog("@slon_strnew: requested %d, total used: %d\n", MSize2(new), session->bytes_used);
     // AdamLog("@slon_strnew: %s\n", new);

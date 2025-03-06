@@ -146,7 +146,7 @@ U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
 
     // build the multipart/form-data payload
 
-    U8* payload = CAlloc(4096 + data_size, adam_task);
+    U8* payload = CAlloc(4096 + data_size, slon_mem_task);
     I64 payload_size = 0;
 
     U8* boundary = "----------SlonFormBoundary00";
@@ -174,7 +174,7 @@ U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
     payload_size += StrLen(boundary);
 
     // build the http headers
-    U8* headers = CAlloc(4096, adam_task);
+    U8* headers = CAlloc(4096, slon_mem_task);
     String.Append(headers, "POST /user/api.php HTTP/1.1\r\n");
     String.Append(headers, "Host: catbox.moe\r\n");
     String.Append(headers, "User-Agent: slon/1.0\r\n");
@@ -182,7 +182,7 @@ U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
     String.Append(headers, "Content-Type: multipart/form-data; boundary=%s\r\n\r\n", boundary);
 
     I64 send_buffer_size = StrLen(headers) + payload_size;
-    U8* send_buffer = CAlloc(send_buffer_size, adam_task);
+    U8* send_buffer = CAlloc(send_buffer_size, slon_mem_task);
 
     MemCpy(send_buffer, headers, StrLen(headers));
     MemCpy(send_buffer + StrLen(headers), payload, payload_size);
@@ -206,7 +206,7 @@ U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
 
     I64 bytes_received = 0;
     I64 response_buffer_size = 0;
-    U8* response_buffer = CAlloc(4096, adam_task);
+    U8* response_buffer = CAlloc(4096, slon_mem_task);
 
     while (!bytes_received) {
         bytes_received = s->receive(response_buffer + response_buffer_size, 4096);
@@ -222,7 +222,7 @@ U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
     url_ptr = StrFind("\r\n", url_ptr) + 2;
     StrFind("\r\n", url_ptr)[0] = NULL;
 
-    cb->key->value = StrNew(url_ptr, adam_task);
+    cb->key->value = StrNew(url_ptr, slon_mem_task);
     cb->key->type = JSON_STRING;
     if (cb->callback) {
         cb->callback(cb->callback_arg);
@@ -248,7 +248,7 @@ U0 @slon_api_async_delete_from_catbox(U8* filename)
 
     // build the multipart/form-data payload
 
-    U8* payload = CAlloc(4096, adam_task);
+    U8* payload = CAlloc(4096, slon_mem_task);
     I64 payload_size = 0;
 
     U8* boundary = "----------SlonFormBoundary00";
@@ -262,7 +262,7 @@ U0 @slon_api_async_delete_from_catbox(U8* filename)
     payload_size = StrLen(payload);
 
     // build the http headers
-    U8* headers = CAlloc(4096, adam_task);
+    U8* headers = CAlloc(4096, slon_mem_task);
     String.Append(headers, "POST /user/api.php HTTP/1.1\r\n");
     String.Append(headers, "Host: catbox.moe\r\n");
     String.Append(headers, "User-Agent: slon/1.0\r\n");
@@ -270,7 +270,7 @@ U0 @slon_api_async_delete_from_catbox(U8* filename)
     String.Append(headers, "Content-Type: multipart/form-data; boundary=%s\r\n\r\n", boundary);
 
     I64 send_buffer_size = StrLen(headers) + payload_size;
-    U8* send_buffer = CAlloc(send_buffer_size, adam_task);
+    U8* send_buffer = CAlloc(send_buffer_size, slon_mem_task);
 
     MemCpy(send_buffer, headers, StrLen(headers));
     MemCpy(send_buffer + StrLen(headers), payload, payload_size);
@@ -283,7 +283,7 @@ U0 @slon_api_async_delete_from_catbox(U8* filename)
 
     I64 bytes_received = 0;
     I64 response_buffer_size = 0;
-    U8* response_buffer = CAlloc(4096, adam_task);
+    U8* response_buffer = CAlloc(4096, slon_mem_task);
 
     while (!bytes_received) {
         bytes_received = s->receive(response_buffer + response_buffer_size, 4096);

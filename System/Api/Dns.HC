@@ -13,7 +13,7 @@ U32 @dns_query(U8* host)
     if (!host)
         return U32_MAX;
     DnsRequest* request = CAlloc(sizeof(DnsRequest), Fs->code_heap);
-    request->host = StrNew(host, adam_task);
+    request->host = StrNew(host, slon_mem_task);
     request->pointer_to_u32 = &res;
     U64* request_ptr = DNS_REQUEST_PTR;
     while (*request_ptr)

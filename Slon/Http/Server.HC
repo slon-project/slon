@@ -78,7 +78,7 @@ SlonHttpResponse* @slon_http_init_response(SlonHttpSession* session)
 
 SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 {
-    SlonHttpSession* session = CAlloc(sizeof(SlonHttpSession), adam_task);
+    SlonHttpSession* session = CAlloc(sizeof(SlonHttpSession), slon_mem_task);
     session->bytes_used = MSize2(session);
     session->s = s;
     session->request = @slon_http_init_request(session);
@@ -87,7 +87,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     // Create a copy of function and patch status
     U64 a;
     I64 code_size = MSize(&@slon_session_status_wrapper_function);
-    session->status = CAlloc(code_size, adam_task->code_heap);
+    session->status = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->status, &@slon_session_status_wrapper_function, code_size);
 
     a = session->status;
@@ -96,7 +96,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch header
     code_size = MSize(&@slon_session_header_wrapper_function);
-    session->header = CAlloc(code_size, adam_task->code_heap);
+    session->header = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->header, &@slon_session_header_wrapper_function, code_size);
 
     a = session->header;
@@ -113,7 +113,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch send
     code_size = MSize(&@slon_session_send_wrapper_function);
-    session->send = CAlloc(code_size, adam_task->code_heap);
+    session->send = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->send, &@slon_session_send_wrapper_function, code_size);
 
     a = session->send;
@@ -134,7 +134,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch verb
     code_size = MSize(&@slon_session_verb_wrapper_function);
-    session->verb = CAlloc(code_size, adam_task->code_heap);
+    session->verb = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->verb, &@slon_session_verb_wrapper_function, code_size);
 
     a = session->verb;
@@ -147,7 +147,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch path
     code_size = MSize(&@slon_session_path_wrapper_function);
-    session->path = CAlloc(code_size, adam_task->code_heap);
+    session->path = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->path, &@slon_session_path_wrapper_function, code_size);
 
     a = session->path;
@@ -160,7 +160,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch path_count
     code_size = MSize(&@slon_session_path_count_wrapper_function);
-    session->path_count = CAlloc(code_size, adam_task->code_heap);
+    session->path_count = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->path_count, &@slon_session_path_count_wrapper_function, code_size);
 
     a = session->path_count;
@@ -169,7 +169,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch content_type
     code_size = MSize(&@slon_session_content_type_wrapper_function);
-    session->content_type = CAlloc(code_size, adam_task->code_heap);
+    session->content_type = CAlloc(code_size, slon_mem_task->code_heap);
     MemCpy(session->content_type, &@slon_session_content_type_wrapper_function, code_size);
 
     a = session->content_type;
@@ -439,7 +439,7 @@ JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* ses
     U8 scratch_buffer[256];
 
     SlonMultipartParser* mp = @slon_calloc(session, sizeof(SlonMultipartParser));
-    mp->consumed = FifoU8New(2048, adam_task);
+    mp->consumed = FifoU8New(2048, slon_mem_task);
 
     JsonObject* obj = Json.CreateObject();
     U8* boundary = StrFind("boundary=", session->header("content-type")) + 9;

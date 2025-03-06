@@ -14,7 +14,7 @@ U0 calloc()
 {
     PUSH_SYSV_REGS
     GET_SYSV_ARGS
-    CAlloc(p0 * p1, adam_task->code_heap);
+    CAlloc(p0 * p1, slon_mem_task->code_heap);
     POP_SYSV_REGS
 }
 
@@ -46,7 +46,7 @@ I64 @fwrite(U8* ptr, I64 size, I64 nmemb, U64 stream)
     switch (stream) {
     case stdout:
     case stderr:
-        tmp = CAlloc((size * nmemb) + 1, adam_task->code_heap);
+        tmp = CAlloc((size * nmemb) + 1, slon_mem_task->code_heap);
         MemCpy(tmp, ptr, (size * nmemb));
 #ifdef QEMU_RUN_TESTS
         QemuDebugMsg(tmp);
@@ -122,7 +122,7 @@ U0 malloc()
 {
     PUSH_SYSV_REGS
     GET_SYSV_ARGS
-    MAlloc(p0, adam_task->code_heap);
+    MAlloc(p0, slon_mem_task->code_heap);
     POP_SYSV_REGS
 }
 
@@ -207,9 +207,9 @@ U8* @realloc(U8* ptr, I64 size)
 {
     U8* new;
     if (!ptr) {
-        new = MAlloc(size, adam_task->code_heap);
+        new = MAlloc(size, slon_mem_task->code_heap);
     } else {
-        new = MAlloc(size, adam_task->code_heap);
+        new = MAlloc(size, slon_mem_task->code_heap);
         MemCpy(new, ptr, size);
         Free(ptr);
     }

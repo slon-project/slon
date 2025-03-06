@@ -26,7 +26,7 @@ U0 @slon_oauth_fetch_token(U8* client_id)
         return;
     }
 
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, adam_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
     StrPrint(url_string, "%s%s", SLON_OAUTH_USERINFO_URL, access_token);
     @http_response* resp = fetch(url_string, fetch_buffer);
 
@@ -49,7 +49,7 @@ oauth_free_and_return:
 
 U0 @async_slon_oauth_fetch_token(U8* client_id)
 {
-    Spawn(&@slon_oauth_fetch_token, StrNew(client_id, adam_task), "OauthFetchTokenTask");
+    Spawn(&@slon_oauth_fetch_token, StrNew(client_id, slon_mem_task), "OauthFetchTokenTask");
 }
 
 U8* @slon_oauth_generate_access_token(SlonHttpSession* session)

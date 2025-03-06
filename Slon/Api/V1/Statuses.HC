@@ -133,7 +133,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
                             while (*(attachment_url_ptr - 1) != '/') {
                                 --attachment_url_ptr;
                             }
-                            Spawn(&@slon_api_async_delete_from_catbox, StrNew(attachment_url_ptr, adam_task), "SlonAsyncCatboxDelete");
+                            Spawn(&@slon_api_async_delete_from_catbox, StrNew(attachment_url_ptr, slon_mem_task), "SlonAsyncCatboxDelete");
                         }
                     }
                 }

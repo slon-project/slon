@@ -1,5 +1,12 @@
 /* clang-format off */
 
+U0 @slon_mem_task_loop()
+{
+    while(1){Sleep(1);};
+}
+
+CTask* slon_mem_task = Spawn(&@slon_mem_task_loop,, "SlonMemTask");
+
 DocMax(adam_task);
 WinMax(adam_task);
 WinToTop(adam_task);
