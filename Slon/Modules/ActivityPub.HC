@@ -599,12 +599,12 @@ U0 @slon_activitypub_delete_status_fedi(JsonObject* status)
 @slon_api_status_create_fedi = &@slon_activitypub_create_status_fedi;
 @slon_api_status_delete_fedi = &@slon_activitypub_delete_status_fedi;
 
-JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* session)
+JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* session, U8* remote_actor)
 {
-    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
-    no_warn scratch_buffer;
+    if (!remote_actor) {
+        return NULL;
+    }
 
-    U8* remote_actor = request_json->@("actor");
     JsonObject* account = @slon_api_account_by_remote_actor(remote_actor);
 
     if (account) {
@@ -795,8 +795,11 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             session->status(401);
             return;
         }
-
-        JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session);
+        JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session, request_json->@("actor"));
+        if (!remote_account) {
+            session->status(500);
+            return;
+        }
         if (db->o("statuses")->a(remote_account->@("id"))) {
             if (@slon_activitypub_status_exists(db->o("statuses")->a(remote_account->@("id")), request_json->o("object")->@("atomUri"))) {
                 session->status(200);
