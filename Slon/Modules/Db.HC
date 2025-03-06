@@ -267,8 +267,17 @@ U0 @slon_db_save_settings_to_disk()
     Json.DumpToFile(scratch_buffer, db->o("settings"));
 }
 
+U0 @slon_db_save_status_to_disk(JsonObject* status)
+{
+    // NOTE: This will commit all statuses to disk for the account specified in the status.
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/statuses/%s.json", SLON_DB_PATH, status->o("account")->@("id"));
+    Json.DumpToFile(scratch_buffer, db->o("statuses")->a(status->o("account")->@("id")));
+}
+
 U0 @slon_db_save_statuses_to_disk()
 {
+    // NOTE: This will commit all statuses to disk for every known account.
     U8 scratch_buffer[256];
     JsonKey* key = db->o("statuses")->keys;
     while (key) {

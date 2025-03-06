@@ -137,7 +137,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
                         }
                     }
                 }
-                @slon_db_save_statuses_to_disk;
+                @slon_db_save_status_to_disk(status);
                 @slon_db_instance_decrement_status_count;
                 @slon_db_save_instance_to_disk;
                 if (@slon_api_status_delete_fedi) {

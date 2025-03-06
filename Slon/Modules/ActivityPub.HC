@@ -896,7 +896,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
                 break;
             }
         }
-        @slon_db_save_statuses_to_disk;
+        @slon_db_save_status_to_disk(status);
         request_object = Json.Clone(request_json);
     }
 

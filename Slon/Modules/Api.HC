@@ -357,7 +357,7 @@ U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = 
         db->o("statuses")->set(account_id, Json.CreateArray(), JSON_ARRAY);
     }
     db->o("statuses")->a(account_id)->append(Json.CreateItem(status, JSON_OBJECT));
-    @slon_db_save_statuses_to_disk;
+    @slon_db_save_status_to_disk(status);
     @slon_db_instance_increment_status_count;
     @slon_db_save_instance_to_disk;
 
