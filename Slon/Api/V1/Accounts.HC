@@ -62,7 +62,7 @@ JsonObject* @slon_accounts_create_local_for_remote_actor(SlonHttpSession* sessio
 
     db->a("accounts")->append(Json.CreateItem(account, JSON_OBJECT));
     // db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
-    @slon_db_save_accounts_to_disk;
+    @slon_db_save_account_to_disk(account);
 
     @slon_free(session, created_at);
     @slon_free(session, id);

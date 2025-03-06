@@ -717,7 +717,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             followers->append(Json.CreateItem(request_json->@("actor"), JSON_STRING));
             account->set("followers_count", account->@("followers_count") + 1);
             @slon_db_save_followers_to_disk;
-            @slon_db_save_accounts_to_disk;
+            @slon_db_save_account_to_disk(account);
         }
         request_object = Json.Clone(request_json);
     }

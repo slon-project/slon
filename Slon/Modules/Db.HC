@@ -7,9 +7,21 @@ JsonObject* db = Json.CreateObject();
 
 U0 @slon_db_load_accounts_from_disk()
 {
+    JsonArray* accounts = Json.CreateArray();
     U8 scratch_buffer[256];
-    StrPrint(scratch_buffer, "%s/accounts.json", SLON_DB_PATH);
-    db->set("accounts", Json.ParseFile(scratch_buffer), JSON_ARRAY);
+    StrPrint(scratch_buffer, "%s/accounts/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonObject* account = NULL;
+    while (de) {
+        account = Json.ParseFile(de->full_name);
+        if (account) {
+            accounts->append(Json.CreateItem(account, JSON_OBJECT));
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("accounts", accounts, JSON_ARRAY);
 }
 
 U0 @slon_db_load_actors_from_disk()
@@ -160,11 +172,24 @@ U0 @slon_db_load_timelines_from_disk()
     db->set("timelines", timelines, JSON_OBJECT);
 }
 
+U0 @slon_db_save_account_to_disk(JsonObject* account)
+{
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/accounts/%s.json", SLON_DB_PATH, account->@("id"));
+    Json.DumpToFile(scratch_buffer, account);
+}
+
 U0 @slon_db_save_accounts_to_disk()
 {
     U8 scratch_buffer[256];
-    StrPrint(scratch_buffer, "%s/accounts.json", SLON_DB_PATH);
-    Json.DumpToFile(scratch_buffer, db->a("accounts"));
+    I64 i;
+    JsonArray* accounts = db->a("accounts");
+    JsonObject* account = NULL;
+    for (i = 0; i < accounts->length; i++) {
+        account = accounts->o(i);
+        StrPrint(scratch_buffer, "%s/accounts/%s.json", SLON_DB_PATH, account->@("id"));
+        Json.DumpToFile(scratch_buffer, account);
+    }
 }
 
 U0 @slon_db_save_actors_to_disk()
@@ -353,7 +378,7 @@ U0 @slon_db_actors_update_user(JsonObject* acct)
 {
     acct->set("avatar_static", acct->@("avatar"));
     acct->set("header_static", acct->@("header"));
-    @slon_db_save_accounts_to_disk;
+    @slon_db_save_account_to_disk(acct);
 
     JsonObject* actors = db->o("actors");
     JsonObject* actor = actors->o(acct->@("username"));
