@@ -34,8 +34,7 @@
 #define JSON_STATE_ARRAY_BOOLEAN 207
 #define JSON_STATE_ARRAY_NULL 208
 
-#define JSON_PARSER_FIFO_SIZE 16384
-#define JSON_STRINGIFY_BUF_SIZE 1048576
+#define JSON_PARSER_FIFO_SIZE 32768
 
 #define JSON_WRAPPER_MAGIC_NUMBER 0xDEADC0DEDEADC0DE
 
@@ -45,6 +44,8 @@ class @json_stringify_string
 {
     I64 length;
     U8* value;
+    I64 capacity;
+    CTask* mem_task;
 }
 
 class @json_element
@@ -67,6 +68,7 @@ class @json_object : @json_element
 {
     I64 length;
     @json_key* keys;
+    CTask* mem_task;
 };
 
 class @json_array : @json_element
@@ -74,6 +76,7 @@ class @json_array : @json_element
     I64 length;
     @json_item* items;
     @json_item* last_item;
+    CTask* mem_task;
 };
 
 extern class @json_callable_object;
@@ -83,9 +86,9 @@ class @json_callable_array : @json_array
     U64 (*@)(I64 index, Bool return_item = FALSE);
     @json_callable_array* (*a)(I64 index, Bool return_item = FALSE);
     @json_callable_object* (*o)(I64 index, Bool return_item = FALSE);
-    U0 (*append)(@json_item* append_item);
-    U0 (*insert)(@json_item* insert_item, I64 index);
-    U0 (*prepend)(@json_item* prepend_item);
+    U0 (*append)(U64 value, I64 type = NULL);
+    U0 (*insert)(I64 index, U64 value, I64 type = NULL);
+    U0 (*prepend)(U64 value, I64 type = NULL);
     U0 (*remove)(I64 index);
 };
 
@@ -106,6 +109,7 @@ class @json_parser
     I64 pos;
     I64 state;
     Bool debug;
+    CTask* mem_task;
 };
 
 #define JsonArray @json_callable_array
@@ -156,12 +160,35 @@ U0 @json_debug_parser_state(@json_parser* parser)
     }
 }
 
-U0 @json_append_item(@json_array* arr, @json_item* append_item)
+@json_item* @json_create_item(U64 value, I64 type = NULL, CTask* mem_task)
 {
-    if (!arr || !append_item)
+    @json_item* item = CAlloc(sizeof(@json_item), mem_task);
+    item->sig = JSON_SIG;
+    item->type = type;
+    if (!item->type) {
+        if (value(@json_element*)->sig == JSON_SIG) {
+            item->type = value(@json_element*)->type;
+        } else if (value > 0x1000) {
+            item->type = JSON_STRING;
+        } else {
+            item->type = JSON_BOOLEAN;
+            value = value != 0;
+        }
+    }
+    if (item->type == JSON_STRING)
+        item->value = StrNew(value, mem_task);
+    else
+        item->value = value;
+    return item;
+}
+
+U0 @json_append_item(@json_array* arr, U64 value, I64 type = NULL)
+{
+    if (!arr)
         return;
     if (arr->type != JSON_ARRAY)
         return;
+    @json_item* append_item = @json_create_item(value, type, arr->mem_task);
     @json_item* item = arr->last_item;
     if (!item) {
         append_item->prev = NULL;
@@ -177,11 +204,11 @@ U0 @json_append_item(@json_array* arr, @json_item* append_item)
     arr->length++;
 }
 
-U8* @json_string_from_fifo(CFifoU8* f)
+U8* @json_string_from_fifo(CFifoU8* f, CTask* mem_task)
 {
     U8 ch;
     I64 i = 0;
-    U8* str = CAlloc(FifoU8Cnt(f) + 1, slon_mem_task);
+    U8* str = CAlloc(FifoU8Cnt(f) + 1, mem_task);
     while (FifoU8Cnt(f)) {
         FifoU8Rem(f, &ch);
         str[i] = ch;
@@ -271,14 +298,14 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_OBJECT_NUMBER:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 @json_rstrip(key->value);
                 key->value = Str2F64(key->value);
                 @json_insert_key(obj, key);
                 return;
                 break;
             case JSON_STATE_OBJECT_BOOLEAN:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 @json_rstrip(key->value);
                 if (StrCmp("true", key->value) && StrCmp("false", key->value)) {
                     PrintErr("@json_parse_object: Illegal boolean value at position %d",
@@ -294,7 +321,7 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
                 return;
                 break;
             case JSON_STATE_OBJECT_NULL:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 @json_rstrip(key->value);
                 if (StrCmp("null", key->value)) {
                     PrintErr("@json_parse_object: Illegal null value at position %d",
@@ -319,13 +346,13 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_OBJECT_NUMBER:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 key->value = Str2F64(key->value);
                 @json_insert_key(obj, key);
                 parser->state = JSON_STATE_OBJECT;
                 break;
             case JSON_STATE_OBJECT_BOOLEAN:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 @json_rstrip(key->value);
                 if (StrCmp("true", key->value) && StrCmp("false", key->value)) {
                     PrintErr("@json_parse_object: Illegal boolean value at position %d",
@@ -341,7 +368,7 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
                 parser->state = JSON_STATE_OBJECT;
                 break;
             case JSON_STATE_OBJECT_NULL:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 @json_rstrip(key->value);
                 if (StrCmp("null", key->value)) {
                     PrintErr("@json_parse_object: Illegal null value at position %d",
@@ -400,7 +427,7 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
         case '"':
             switch (parser->state) {
             case JSON_STATE_OBJECT_STRING:
-                key->value = @json_string_from_fifo(parser->consumed);
+                key->value = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 @json_insert_key(obj, key);
                 parser->state = JSON_STATE_OBJECT_NEXT;
                 break;
@@ -409,11 +436,11 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
                 parser->state = JSON_STATE_OBJECT_STRING;
                 break;
             case JSON_STATE_OBJECT_KEY:
-                key->name = @json_string_from_fifo(parser->consumed);
+                key->name = @json_string_from_fifo(parser->consumed, parser->mem_task);
                 parser->state = JSON_STATE_OBJECT_SEPARATOR;
                 break;
             case JSON_STATE_OBJECT:
-                key = CAlloc(sizeof(@json_key), slon_mem_task);
+                key = CAlloc(sizeof(@json_key), parser->mem_task);
                 key->sig = JSON_SIG;
                 parser->state = JSON_STATE_OBJECT_KEY;
                 break;
@@ -485,7 +512,7 @@ U0 @json_parse_object(@json_parser* parser, @json_object* obj)
 
 U0 @json_parse_array(@json_parser* parser, @json_array* arr)
 {
-    @json_item* item = NULL;
+    U64 value = NULL;
     while (1) {
         if (parser->state == JSON_STATE_ARRAY) {
             switch (parser->stream[parser->pos]) {
@@ -498,8 +525,6 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 return;
                 break;
             }
-            item = CAlloc(sizeof(@json_item), slon_mem_task);
-            item->sig = JSON_SIG;
             parser->state = JSON_STATE_ARRAY_TYPE;
         }
         switch (parser->stream[parser->pos]) {
@@ -519,38 +544,38 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_ARRAY_NUMBER:
-                item->value = @json_string_from_fifo(parser->consumed);
-                @json_rstrip(item->value);
-                item->value = Str2F64(item->value);
-                @json_append_item(arr, item);
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                @json_rstrip(value);
+                value = Str2F64(value);
+                @json_append_item(arr, value, JSON_NUMBER);
                 return;
                 break;
             case JSON_STATE_ARRAY_BOOLEAN:
-                item->value = @json_string_from_fifo(parser->consumed);
-                @json_rstrip(item->value);
-                if (StrCmp("true", item->value) && StrCmp("false", item->value)) {
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                @json_rstrip(value);
+                if (StrCmp("true", value) && StrCmp("false", value)) {
                     PrintErr("@json_parse_array: Illegal boolean value at position %d",
                         parser->pos);
                     while (1)
                         Sleep(1);
                 }
-                if (!StrCmp("true", item->value))
-                    item->value = TRUE;
+                if (!StrCmp("true", value))
+                    value = TRUE;
                 else
-                    item->value = FALSE;
-                @json_append_item(arr, item);
+                    value = FALSE;
+                @json_append_item(arr, value, JSON_BOOLEAN);
                 break;
             case JSON_STATE_ARRAY_NULL:
-                item->value = @json_string_from_fifo(parser->consumed);
-                @json_rstrip(item->value);
-                if (StrCmp("null", item->value)) {
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                @json_rstrip(value);
+                if (StrCmp("null", value)) {
                     PrintErr("@json_parse_array: Illegal null value at position %d",
                         parser->pos);
                     while (1)
                         Sleep(1);
                 }
-                item->value = NULL;
-                @json_append_item(arr, item);
+                value = NULL;
+                @json_append_item(arr, value, JSON_NULL);
                 break;
             case JSON_STATE_ARRAY:
             case JSON_STATE_ARRAY_NEXT:
@@ -564,38 +589,38 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_ARRAY_NUMBER:
-                item->value = @json_string_from_fifo(parser->consumed);
-                item->value = Str2F64(item->value);
-                @json_append_item(arr, item);
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                value = Str2F64(value);
+                @json_append_item(arr, value, JSON_NUMBER);
                 parser->state = JSON_STATE_ARRAY;
                 break;
             case JSON_STATE_ARRAY_BOOLEAN:
-                item->value = @json_string_from_fifo(parser->consumed);
-                @json_rstrip(item->value);
-                if (StrCmp("true", item->value) && StrCmp("false", item->value)) {
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                @json_rstrip(value);
+                if (StrCmp("true", value) && StrCmp("false", value)) {
                     PrintErr("@json_parse_array: Illegal boolean value at position %d",
                         parser->pos);
                     while (1)
                         Sleep(1);
                 }
-                if (!StrCmp("true", item->value))
-                    item->value = TRUE;
+                if (!StrCmp("true", value))
+                    value = TRUE;
                 else
-                    item->value = FALSE;
-                @json_append_item(arr, item);
+                    value = FALSE;
+                @json_append_item(arr, value, JSON_BOOLEAN);
                 parser->state = JSON_STATE_ARRAY;
                 break;
             case JSON_STATE_ARRAY_NULL:
-                item->value = @json_string_from_fifo(parser->consumed);
-                @json_rstrip(item->value);
-                if (StrCmp("null", item->value)) {
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                @json_rstrip(value);
+                if (StrCmp("null", value)) {
                     PrintErr("@json_parse_array: Illegal null value at position %d",
                         parser->pos);
                     while (1)
                         Sleep(1);
                 }
-                item->value = NULL;
-                @json_append_item(arr, item);
+                value = NULL;
+                @json_append_item(arr, value, JSON_NULL);
                 parser->state = JSON_STATE_ARRAY;
                 break;
             case JSON_STATE_ARRAY_NEXT:
@@ -609,9 +634,8 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_ARRAY_TYPE:
-                item->type = JSON_ARRAY;
-                item->value = @json_parse_object_or_array(parser);
-                @json_append_item(arr, item);
+                value = @json_parse_object_or_array(parser);
+                @json_append_item(arr, value, JSON_ARRAY);
                 parser->state = JSON_STATE_ARRAY_NEXT;
                 break;
             }
@@ -622,9 +646,8 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_ARRAY_TYPE:
-                item->type = JSON_OBJECT;
-                item->value = @json_parse_object_or_array(parser);
-                @json_append_item(arr, item);
+                value = @json_parse_object_or_array(parser);
+                @json_append_item(arr, value, JSON_OBJECT);
                 parser->state = JSON_STATE_ARRAY_NEXT;
                 break;
             }
@@ -632,12 +655,11 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
         case '"':
             switch (parser->state) {
             case JSON_STATE_ARRAY_STRING:
-                item->value = @json_string_from_fifo(parser->consumed);
-                @json_append_item(arr, item);
+                value = @json_string_from_fifo(parser->consumed, parser->mem_task);
+                @json_append_item(arr, value, JSON_STRING);
                 parser->state = JSON_STATE_ARRAY_NEXT;
                 break;
             case JSON_STATE_ARRAY_TYPE:
-                item->type = JSON_STRING;
                 parser->state = JSON_STATE_ARRAY_STRING;
                 break;
             }
@@ -651,7 +673,6 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_ARRAY_TYPE:
-                item->type = JSON_NUMBER;
                 parser->state = JSON_STATE_ARRAY_NUMBER;
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
@@ -664,7 +685,6 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_ARRAY_TYPE:
-                item->type = JSON_BOOLEAN;
                 parser->state = JSON_STATE_ARRAY_BOOLEAN;
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
@@ -676,7 +696,6 @@ U0 @json_parse_array(@json_parser* parser, @json_array* arr)
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
             case JSON_STATE_OBJECT_TYPE:
-                item->type = JSON_NULL;
                 parser->state = JSON_STATE_ARRAY_NULL;
                 FifoU8Ins(parser->consumed, parser->stream[parser->pos]);
                 break;
@@ -707,7 +726,7 @@ extern @json_callable_object* @json_create_callable_object(@json_object* obj);
 
 @json_element* @json_parse_object_or_array(@json_parser* parser)
 {
-    @json_element* el = CAlloc(sizeof(@json_element) * 2, slon_mem_task);
+    @json_element* el = CAlloc(sizeof(@json_array), parser->mem_task);
     el->sig = JSON_SIG;
     while (1) {
         switch (parser->stream[parser->pos]) {
@@ -721,6 +740,7 @@ extern @json_callable_object* @json_create_callable_object(@json_object* obj);
             break;
         case '{':
             el->type = JSON_OBJECT;
+            el(@json_object*)->mem_task = parser->mem_task;
             parser->pos++;
             parser->state = JSON_STATE_OBJECT;
             @json_parse_object(parser, el);
@@ -728,6 +748,7 @@ extern @json_callable_object* @json_create_callable_object(@json_object* obj);
             break;
         case '[':
             el->type = JSON_ARRAY;
+            el(@json_array*)->mem_task = parser->mem_task;
             parser->pos++;
             parser->state = JSON_STATE_ARRAY;
             @json_parse_array(parser, el);
@@ -745,45 +766,46 @@ extern @json_callable_object* @json_create_callable_object(@json_object* obj);
     }
 }
 
-@json_element* @json_parse(U8* str)
+@json_element* @json_parse(U8* str, CTask* mem_task)
 {
-    @json_parser* parser = CAlloc(sizeof(@json_parser), slon_mem_task);
-    parser->consumed = FifoU8New(JSON_PARSER_FIFO_SIZE, slon_mem_task);
-    // parser->debug = TRUE;
+    if (!str || !mem_task) {
+        return NULL;
+    }
+    @json_parser* parser = CAlloc(sizeof(@json_parser), mem_task);
+    parser->mem_task = mem_task;
+    parser->consumed = FifoU8New(JSON_PARSER_FIFO_SIZE, parser->mem_task);
     parser->stream = str;
-    @json_element* root = @json_parse_object_or_array(parser);
-    FifoU8Flush(parser->consumed);
-    FifoU8Del(parser->consumed);
-    Free(parser);
-    return root;
+    return @json_parse_object_or_array(parser);
 }
 
-U0 @json_prepend_item(@json_array* arr, @json_item* prepend_item)
+U0 @json_prepend_item(@json_array* arr, U64 value, I64 type)
 {
-    if (!arr || !prepend_item)
+    if (!arr)
         return;
     if (arr->type != JSON_ARRAY)
         return;
+    @json_item* prepend_item = @json_create_item(value, type, arr->mem_task);
     @json_item* items = arr->items;
     arr->items = prepend_item;
     arr->items->next = items;
     arr->length++;
 }
 
-U0 @json_insert_item(@json_array* arr, @json_item* insert_item, I64 index)
+U0 @json_insert_item(@json_array* arr, I64 index, U64 value, I64 type)
 {
-    if (!arr || !insert_item)
+    if (!arr)
         return;
     if (arr->type != JSON_ARRAY)
         return;
     if (index <= 0) {
-        @json_prepend_item(arr, insert_item);
+        @json_prepend_item(arr, value, type);
         return;
     }
     if (index >= arr->length) {
-        @json_append_item(arr, insert_item);
+        @json_append_item(arr, value, type);
         return;
     }
+    @json_item* insert_item = @json_create_item(value, type, arr->mem_task);
     @json_item* insert_at_item = arr->items;
     @json_item* insert_after_item = NULL;
     I64 i;
@@ -795,6 +817,16 @@ U0 @json_insert_item(@json_array* arr, @json_item* insert_item, I64 index)
     insert_item->next = insert_at_item;
     insert_at_item->prev = insert_item;
     arr->length++;
+}
+
+U0 @json_stringify_check_capacity(@json_stringify_string* str)
+{
+    if (str->length >= str->capacity) {
+        str->capacity *= 2;
+        U8* new_value = CAlloc(str->capacity * 2, str->mem_task);
+        MemCpy(new_value, str->value, str->length);
+        str->value = new_value;
+    }
 }
 
 U0 @json_stringify_append_char(@json_stringify_string* str, U8 char)
@@ -830,6 +862,7 @@ U0 @json_stringify_append_char(@json_stringify_string* str, U8 char)
         break;
     }
     str->value[str->length] = NULL;
+    @json_stringify_check_capacity(str);
 }
 
 U0 @json_stringify_append_char_escape_quotes(@json_stringify_string* str, U8 char)
@@ -869,6 +902,7 @@ U0 @json_stringify_append_char_escape_quotes(@json_stringify_string* str, U8 cha
         break;
     }
     str->value[str->length] = NULL;
+    @json_stringify_check_capacity(str);
 }
 
 U0 @json_stringify_append_str(@json_stringify_string* str, U8* str2)
@@ -884,6 +918,7 @@ U0 @json_stringify_append_str(@json_stringify_string* str, U8* str2)
             @json_stringify_append_char_escape_quotes(str, *str2);
         }
         str2++;
+        @json_stringify_check_capacity(str);
     }
 }
 
@@ -1004,15 +1039,17 @@ U0 @json_stringify_object_or_array(@json_stringify_string* str, @json_element* e
     }
 }
 
-U8* @json_stringify(@json_element* el, I64 buf_size = JSON_STRINGIFY_BUF_SIZE)
+U8* @json_stringify(@json_element* el, CTask* mem_task)
 {
-    // U8* str = CAlloc(buf_size, slon_mem_task);
-    @json_stringify_string* str = CAlloc(sizeof(@json_stringify_string), slon_mem_task);
-    U8* value = CAlloc(buf_size, slon_mem_task);
-    str->value = value;
+    if (!el || !mem_task) {
+        return NULL;
+    }
+    @json_stringify_string* str = CAlloc(sizeof(@json_stringify_string), mem_task);
+    str->mem_task = mem_task;
+    str->capacity = 256;
+    str->value = CAlloc(str->capacity * 2, str->mem_task);
     @json_stringify_object_or_array(str, el);
-    Free(str);
-    return value;
+    return str->value;
 }
 
 U64 @json_get(@json_object* obj, U8* key, Bool return_key = FALSE)
@@ -1049,12 +1086,12 @@ U0 @json_set(@json_object* obj, U8* key, U64 value, I64 type = JSON_SAME)
         }
         iter_key = iter_key->next;
     }
-    @json_key* new_key = CAlloc(sizeof(@json_key), slon_mem_task);
+    @json_key* new_key = CAlloc(sizeof(@json_key), obj->mem_task);
     new_key->sig = JSON_SIG;
-    new_key->name = StrNew(key, slon_mem_task);
+    new_key->name = StrNew(key, obj->mem_task);
     new_key->type = type;
     if (new_key->type == JSON_STRING)
-        new_key->value = StrNew(value, slon_mem_task);
+        new_key->value = StrNew(value, obj->mem_task);
     else
         new_key->value = value;
     @json_insert_key(obj, new_key);
@@ -1077,7 +1114,6 @@ U0 @json_unset(@json_object* obj, U8* key)
                 prev_key->next = next_key;
             if (next_key)
                 next_key->prev = prev_key;
-            // FIXME: Delete the unset key
             return;
         }
         iter_key = iter_key->next;
@@ -1101,15 +1137,13 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
 @json_callable_object* @json_create_callable_object(@json_object* obj)
 {
-    // Alloc callable object and copy instance
-    @json_callable_object* cobj = CAlloc(sizeof(@json_callable_object), slon_mem_task);
-    cobj->sig = JSON_SIG;
+    @json_callable_object* cobj = CAlloc(sizeof(@json_callable_object), obj->mem_task);
     MemCpy(cobj, obj, sizeof(@json_object));
 
     // Create a copy of function and patch Get
     U64 a;
     I64 code_size = MSize(&@json_callable_object_get_wrapper_function);
-    cobj->@ = CAlloc(code_size, slon_mem_task->code_heap);
+    cobj->@ = CAlloc(code_size, obj->mem_task->code_heap);
     MemCpy(cobj->@, &@json_callable_object_get_wrapper_function, code_size);
 
     a = cobj->@;
@@ -1122,7 +1156,7 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
     // Create a copy of function and patch Set
     code_size = MSize(&@json_callable_object_set_wrapper_function);
-    cobj->set = CAlloc(code_size, slon_mem_task->code_heap);
+    cobj->set = CAlloc(code_size, obj->mem_task->code_heap);
     MemCpy(cobj->set, &@json_callable_object_set_wrapper_function, code_size);
 
     a = cobj->set;
@@ -1135,7 +1169,7 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
 
     // Create a copy of function and patch Unset
     code_size = MSize(&@json_callable_object_unset_wrapper_function);
-    cobj->unset = CAlloc(code_size, slon_mem_task->code_heap);
+    cobj->unset = CAlloc(code_size, obj->mem_task->code_heap);
     MemCpy(cobj->unset, &@json_callable_object_unset_wrapper_function, code_size);
 
     a = cobj->unset;
@@ -1152,24 +1186,16 @@ U0 @json_callable_object_unset_wrapper_function(U8* key)
     return cobj;
 }
 
-@json_callable_object* @json_create_object()
+@json_callable_object* @json_create_object(CTask* mem_task)
 {
-    @json_object* obj = CAlloc(sizeof(@json_object), slon_mem_task);
+    if (!mem_task) {
+        return NULL;
+    }
+    @json_object* obj = CAlloc(sizeof(@json_object), mem_task);
+    obj->mem_task = mem_task;
     obj->sig = JSON_SIG;
     obj->type = JSON_OBJECT;
     return @json_create_callable_object(obj);
-}
-
-@json_item* @json_create_item(U64 value, I64 type)
-{
-    @json_item* item = CAlloc(sizeof(@json_item), slon_mem_task);
-    item->sig = JSON_SIG;
-    item->type = type;
-    if (item->type == JSON_STRING)
-        item->value = StrNew(value, slon_mem_task);
-    else
-        item->value = value;
-    return item;
 }
 
 U64 @json_array_index(@json_array* arr, I64 index, Bool return_item = FALSE)
@@ -1227,28 +1253,27 @@ U0 @json_remove_item(@json_array* arr, I64 index)
     prev_item->next = next_item;
     if (next_item)
         next_item->prev = prev_item;
-    @json_remove_item_final : Free(item);
-    --arr->length;
+    @json_remove_item_final : --arr->length;
 }
 
 U64 @json_callable_array_index_wrapper_function(I64 index, Bool return_item = FALSE)
 {
-    return @json_get(JSON_WRAPPER_MAGIC_NUMBER, index, return_item);
+    return @json_array_index(JSON_WRAPPER_MAGIC_NUMBER, index, return_item);
 }
 
-U0 @json_callable_array_append_wrapper_function(@json_item* append_item)
+U0 @json_callable_array_append_wrapper_function(U64 value, I64 type = NULL)
 {
-    @json_append_item(JSON_WRAPPER_MAGIC_NUMBER, append_item);
+    @json_append_item(JSON_WRAPPER_MAGIC_NUMBER, value, type);
 }
 
-U0 @json_callable_array_insert_wrapper_function(@json_item* insert_item, I64 index)
+U0 @json_callable_array_insert_wrapper_function(I64 index, U64 value, I64 type = NULL)
 {
-    @json_insert_item(JSON_WRAPPER_MAGIC_NUMBER, insert_item, index);
+    @json_insert_item(JSON_WRAPPER_MAGIC_NUMBER, index, value, type);
 }
 
-U0 @json_callable_array_prepend_wrapper_function(@json_item* prepend_item)
+U0 @json_callable_array_prepend_wrapper_function(U64 value, I64 type = NULL)
 {
-    @json_prepend_item(JSON_WRAPPER_MAGIC_NUMBER, prepend_item);
+    @json_prepend_item(JSON_WRAPPER_MAGIC_NUMBER, value, type);
 }
 
 U0 @json_callable_array_remove_wrapper_function(I64 index)
@@ -1259,14 +1284,13 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 @json_callable_array* @json_create_callable_array(@json_array* arr)
 {
     // Alloc callable object and copy instance
-    @json_callable_array* carr = CAlloc(sizeof(@json_callable_array), slon_mem_task);
-    carr->sig = JSON_SIG;
+    @json_callable_array* carr = CAlloc(sizeof(@json_callable_array), arr->mem_task);
     MemCpy(carr, arr, sizeof(@json_array));
 
     // Create a copy of function and patch Index
     U64 a;
     I64 code_size = MSize(&@json_callable_array_index_wrapper_function);
-    carr->@ = CAlloc(code_size, slon_mem_task->code_heap);
+    carr->@ = CAlloc(code_size, arr->mem_task->code_heap);
     MemCpy(carr->@, &@json_callable_array_index_wrapper_function, code_size);
 
     a = carr->@;
@@ -1282,46 +1306,46 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
 
     // Create a copy of function and patch Append
     code_size = MSize(&@json_callable_array_append_wrapper_function);
-    carr->append = CAlloc(code_size, slon_mem_task->code_heap);
+    carr->append = CAlloc(code_size, arr->mem_task->code_heap);
     MemCpy(carr->append, &@json_callable_array_append_wrapper_function, code_size);
 
     a = carr->append;
-    a += 0x0c;
+    a += 0x12;
     MemSetI64(a, carr, 1);
 
     a = carr->append;
-    a += 0x15;
+    a += 0x1b;
     @patch_call_rel32(a, &@json_append_item);
 
     // Create a copy of function and patch Prepend
     code_size = MSize(&@json_callable_array_prepend_wrapper_function);
-    carr->prepend = CAlloc(code_size, slon_mem_task->code_heap);
+    carr->prepend = CAlloc(code_size, arr->mem_task->code_heap);
     MemCpy(carr->prepend, &@json_callable_array_prepend_wrapper_function, code_size);
 
     a = carr->prepend;
-    a += 0x0c;
+    a += 0x12;
     MemSetI64(a, carr, 1);
 
     a = carr->prepend;
-    a += 0x15;
+    a += 0x1b;
     @patch_call_rel32(a, &@json_prepend_item);
 
     // Create a copy of function and patch Insert
     code_size = MSize(&@json_callable_array_insert_wrapper_function);
-    carr->insert = CAlloc(code_size, slon_mem_task->code_heap);
+    carr->insert = CAlloc(code_size, arr->mem_task->code_heap);
     MemCpy(carr->insert, &@json_callable_array_insert_wrapper_function, code_size);
 
     a = carr->insert;
-    a += 0x12;
+    a += 0x1a;
     MemSetI64(a, carr, 1);
 
     a = carr->insert;
-    a += 0x1b;
+    a += 0x23;
     @patch_call_rel32(a, &@json_insert_item);
 
     // Create a copy of function and patch Remove
     code_size = MSize(&@json_callable_array_remove_wrapper_function);
-    carr->remove = CAlloc(code_size, slon_mem_task->code_heap);
+    carr->remove = CAlloc(code_size, arr->mem_task->code_heap);
     MemCpy(carr->remove, &@json_callable_array_remove_wrapper_function, code_size);
 
     a = carr->remove;
@@ -1335,97 +1359,67 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
     return carr;
 }
 
-@json_array* @json_create_array()
+@json_array* @json_create_array(CTask* mem_task)
 {
-    @json_array* arr = CAlloc(sizeof(@json_array), slon_mem_task);
+    if (!mem_task) {
+        return NULL;
+    }
+    @json_array* arr = CAlloc(sizeof(@json_array), mem_task);
+    arr->mem_task = mem_task;
     arr->sig = JSON_SIG;
     arr->type = JSON_ARRAY;
     return @json_create_callable_array(arr);
 }
 
-U64 @json_parse_file(U8* path)
+U64 @json_parse_file(U8* path, CTask* mem_task)
 {
+    if (!path || !mem_task || !FileFind(path)) {
+        return NULL;
+    }
     U64 res = NULL;
     U8* json_string = FileRead(path);
     if (json_string) {
-        res = @json_parse(json_string);
-        Free(json_string);
+        res = @json_parse(json_string, mem_task);
     }
     return res;
 }
 
-U0 @json_delete(@json_element* el)
+U0 @json_dump_to_file(U8* path, @json_element* el, CTask* mem_task)
 {
-    // FIXME: Implement this
-    no_warn el;
-}
-
-U0 @json_dump_to_file(U8* path, @json_element* el)
-{
-    if (!path || !el)
+    if (!path || !el || !mem_task)
         return;
-    U8* json_string = @json_stringify(el);
+    U8* json_string = @json_stringify(el, mem_task);
     FileWrite(path, json_string, StrLen(json_string));
-    Free(json_string);
 }
 
-@json_element* @json_clone(@json_element* el)
+@json_element* @json_clone(@json_element* el, CTask* mem_task)
 {
-    if (!el)
+    if (!el || !mem_task) {
         return NULL;
-    U8* tmp = @json_stringify(el);
-    if (!tmp)
+    }
+    U8* tmp = @json_stringify(el, mem_task);
+    if (!tmp) {
         return NULL;
-    @json_element* clone = @json_parse(tmp);
-    Free(tmp);
-    return clone;
+    }
+    return @json_parse(tmp, mem_task);
 }
 
 class @json
 {
-    U0(*AppendItem)
-    (@json_array * arr, @json_item * append_item);
-    U64(*ArrayIndex)
-    (@json_array * arr, I64 index, Bool return_item = FALSE);
-    @json_element* (*Clone)(@json_element* el);
-    @json_object* (*CreateObject)();
-    @json_callable_object* (*CreateCallableObject)(@json_object* obj);
-    @json_item* (*CreateItem)(U64 value, I64 type);
-    @json_array* (*CreateArray)();
-    U0 (*Delete)(@json_element* el);
-    U0 (*DumpToFile)(U8* path, @json_element* el);
-    U0(*InsertItem)
-    (@json_array * arr, @json_item * insert_item, I64 index);
-    @json_element* (*Parse)(U8* str);
-    U64 (*ParseFile)(U8* path);
-    U0(*PrependItem)
-    (@json_array * arr, @json_item * prepend_item);
-    U0(*RemoveItem)
-    (@json_array * arr, I64 index);
-    U64(*Get)
-    (@json_object * obj, U8 * key, Bool return_key = FALSE);
-    U0(*Set)
-    (@json_object * obj, U8 * key, U64 value, I64 type);
-    U8* (*Stringify)(@json_element* el, I64 buf_size = JSON_STRINGIFY_BUF_SIZE);
-    U0(*Unset)
-    (@json_object * obj, U8 * key);
+    @json_element* (*Clone)(@json_element* el, CTask* mem_task);
+    @json_array* (*CreateArray)(CTask* mem_task);
+    @json_object* (*CreateObject)(CTask* mem_task);
+    U0 (*DumpToFile)(U8* path, @json_element* el, CTask* mem_task);
+    @json_element* (*Parse)(U8* str, CTask* mem_task);
+    U64 (*ParseFile)(U8* path, CTask* mem_task);
+    U8* (*Stringify)(@json_element* el, CTask* mem_task);
 };
 
 @json Json;
-Json.AppendItem = &@json_append_item;
-Json.ArrayIndex = &@json_array_index;
 Json.Clone = &@json_clone;
 Json.CreateArray = &@json_create_array;
-Json.CreateItem = &@json_create_item;
 Json.CreateObject = &@json_create_object;
-Json.Delete = &@json_delete;
 Json.DumpToFile = &@json_dump_to_file;
-Json.Get = &@json_get;
-Json.InsertItem = &@json_insert_item;
 Json.Parse = &@json_parse;
 Json.ParseFile = &@json_parse_file;
-Json.PrependItem = &@json_prepend_item;
-Json.RemoveItem = &@json_remove_item;
-Json.Set = &@json_set;
 Json.Stringify = &@json_stringify;
-Json.Unset = &@json_unset;
