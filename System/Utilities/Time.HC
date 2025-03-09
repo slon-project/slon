@@ -63,47 +63,9 @@ U0 @time_update(U8* date_str, I64 mS_delta, I64 hour_offset)
     @time_cmos_update_byte(0x00, second);
 }
 
-Bool @is_dst(I64 month, I64 day, I64 day_of_week, I64 hour)
-{
-    if (month < 3 || month > 11) {
-        return FALSE;
-    }
-    if (month > 3 && month < 11) {
-        return TRUE;
-    }
-    if (month == 3) {
-        if (day < (14 - day_of_week)) {
-            return FALSE;
-        }
-        if (day > (14 - day_of_week) && hour >= 2) {
-            return TRUE;
-        }
-        return FALSE;
-    }
-    if (month == 11) {
-        if (day < (7 - day_of_week)) {
-            return TRUE;
-        }
-        if (day == (7 - day_of_week) && hour < 1) {
-            return TRUE;
-        }
-        return FALSE;
-    }
-    return FALSE;
-}
-
-Bool @time_in_dst()
-{
-    CDateStruct ds;
-    Date2Struct(&ds, Now);
-    return @is_dst(ds.mon, ds.day_of_mon, ds.day_of_week, ds.hour);
-}
-
 I64 @time_tz_offset()
 {
-    if (@time_in_dst)
-        return -4;
-    return -5;
+    return -4;
 }
 
 U0 @time_query(Bool set = FALSE)
@@ -114,13 +76,13 @@ U0 @time_query(Bool set = FALSE)
     while (resp->state != HTTP_STATE_DONE)
         Sleep(1);
     I64 mS_delta = cnts.jiffies;
-    "Set current date and time to %s ", Json.Get(resp->headers, "Date");
+    "Set current date and time to %s ", resp->headers->@("Date");
     if (!set)
         set = YorN;
     else
         "\n";
     if (set)
-        @time_update(Json.Get(resp->headers, "Date"), mS_delta, @time_tz_offset);
+        @time_update(resp->headers->@("Date"), mS_delta, @time_tz_offset);
 }
 
 U0 TimeSync()
