@@ -282,7 +282,7 @@ U0 @http_parse_response_headers(@http_response* resp, U8* buffer, I64 length)
         return;
     resp->body.data = response_data_ptr + 4;
     resp->body.data[-4] = NULL;
-    JsonObject* headers = Json.CreateObject();
+    JsonObject* headers = Json.CreateObject(slon_mem_task);
     U8** lines = NULL;
     I64 lines_count = 0;
     I64 i;
@@ -308,7 +308,7 @@ U0 @http_parse_response_headers(@http_response* resp, U8* buffer, I64 length)
                 key_ptr = lines[i];
                 value_ptr = lines[i] + j + 2;
                 (*StrFind("\r", value_ptr)) = NULL;
-                Json.Set(headers, key_ptr, StrNew(value_ptr, slon_mem_task), JSON_STRING);
+                headers->set(key_ptr, value_ptr, JSON_STRING);
                 goto @http_next_header_line;
             }
         }
