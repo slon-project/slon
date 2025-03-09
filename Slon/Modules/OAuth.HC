@@ -37,7 +37,7 @@ U0 @slon_oauth_fetch_token(U8* client_id)
         // POSIX people think JSON should end with a new line, and the Jakt parser disagrees :^)
         while (resp->body.data[StrLen(resp->body.data) - 1] == '\n')
             resp->body.data[StrLen(resp->body.data) - 1] = NULL;
-        JsonObject* response = Json.Parse(resp->body.data);
+        JsonObject* response = Json.Parse(resp->body.data, slon_mem_task);
         db->o("oauth")->o("responses")->set(client_id, response, JSON_OBJECT);
     }
     // FIXME: Free resp
@@ -96,7 +96,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                 }
                 I64 created_at = ToF64(CDate2Unix(Now));
 
-                JsonObject* token_object = Json.CreateObject();
+                JsonObject* token_object = Json.CreateObject(slon_mem_task);
                 token_object->set("access_token", access_token, JSON_STRING);
                 token_object->set("token_type", "Bearer", JSON_STRING);
                 token_object->set("scope", "read write follow push", JSON_STRING);
@@ -117,7 +117,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                     authorization_code_exists = db->o("oauth")->o("codes")->@(authorization_code) > 0;
                 }
 
-                JsonObject* code_object = Json.CreateObject();
+                JsonObject* code_object = Json.CreateObject(slon_mem_task);
                 code_object->set("access_token", access_token, JSON_STRING);
                 code_object->set("token_type", "Bearer", JSON_STRING);
                 code_object->set("scope", "read write follow push", JSON_STRING);
@@ -130,10 +130,9 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                 @slon_db_save_oauth_to_disk;
 
                 StrPrint(scratch_buffer, "%s?code=%s", redirect_uri, authorization_code);
-                JsonObject* redirect_uri_object = Json.CreateObject();
+                JsonObject* redirect_uri_object = Json.CreateObject(slon_mem_task);
                 redirect_uri_object->set("redirect_uri", scratch_buffer, JSON_STRING);
                 session->send(redirect_uri_object);
-                Json.Delete(redirect_uri_object);
 
                 @slon_free(session, authorization_code);
                 @slon_free(session, access_token);
@@ -155,7 +154,6 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
         }
         session->status(202);
     }
-    Json.Delete(app_object);
 }
 
 U0 @slon_oauth_token_post(SlonHttpSession* session)
@@ -187,6 +185,4 @@ U0 @slon_oauth_token_post(SlonHttpSession* session)
         // If client_id and client_secret do not match, it's Unauthorized
         session->status(401);
     }
-
-    Json.Delete(code_object);
 }

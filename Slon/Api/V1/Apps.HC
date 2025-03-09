@@ -43,16 +43,16 @@ U0 @slon_api_v1_apps_post(SlonHttpSession* session)
         request_scopes = String.Split(request_json->@("scopes"), ' ', &request_scopes_count);
     }
 
-    JsonArray* scopes = Json.CreateArray();
+    JsonArray* scopes = Json.CreateArray(slon_mem_task);
     I64 i;
     for (i = 0; i < request_scopes_count; i++) {
-        scopes->append(Json.CreateItem(request_scopes[i], JSON_STRING));
+        scopes->append(request_scopes[i], JSON_STRING);
     }
 
-    JsonArray* redirect_uris = Json.CreateArray();
-    redirect_uris->append(Json.CreateItem(request_json->@("redirect_uris"), JSON_STRING));
+    JsonArray* redirect_uris = Json.CreateArray(slon_mem_task);
+    redirect_uris->append(request_json->@("redirect_uris"), JSON_STRING);
 
-    JsonObject* credential_app = Json.CreateObject();
+    JsonObject* credential_app = Json.CreateObject(slon_mem_task);
     credential_app->set("id", id, JSON_STRING);
     credential_app->set("name", request_json->@("client_name"), JSON_STRING);
     credential_app->set("website", request_json->@("website"), JSON_STRING);

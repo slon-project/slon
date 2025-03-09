@@ -42,7 +42,7 @@ U0 @slon_admin_create_ap_actor(SlonHttpSession* session, JsonObject* acct)
     U8* domain = db->o("instance")->@("uri");
     U8* username = acct->@("username");
 
-    JsonObject* actor = Json.Clone(SLON_DEFAULT_ACTOR_OBJECT);
+    JsonObject* actor = Json.Clone(SLON_DEFAULT_ACTOR_OBJECT, slon_mem_task);
 
     StrPrint(scratch_buffer, "https://%s/users/%s", domain, username);
     actor->set("id", scratch_buffer, JSON_STRING);
@@ -62,7 +62,7 @@ U0 @slon_admin_create_ap_actor(SlonHttpSession* session, JsonObject* acct)
     actor->set("name", acct->@("display_name"), JSON_STRING);
     actor->set("summary", acct->@("note"), JSON_STRING);
 
-    JsonObject* icon = Json.Parse("{\"type\":\"Image\"}");
+    JsonObject* icon = Json.Parse("{\"type\":\"Image\"}", slon_mem_task);
     icon->set("url", acct->@("avatar"), JSON_STRING);
     actor->set("icon", icon, JSON_OBJECT);
 
@@ -74,7 +74,7 @@ U0 @slon_admin_create_ap_actor(SlonHttpSession* session, JsonObject* acct)
 
     db->o("private_keys")->set(username, request_json->@("privatekey"), JSON_STRING);
 
-    JsonObject* publickey = Json.CreateObject();
+    JsonObject* publickey = Json.CreateObject(slon_mem_task);
     StrPrint(scratch_buffer, "https://%s/users/%s#main-key", domain, username);
     publickey->set("id", scratch_buffer, JSON_STRING);
     StrPrint(scratch_buffer, "https://%s/users/%s", domain, username);
@@ -94,8 +94,8 @@ U0 @slon_admin_create_account(SlonHttpSession* session)
     U8* id = @slon_api_generate_unique_id(session);
     U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
 
-    JsonObject* acct = Json.CreateObject();
-    JsonObject* source = Json.CreateObject();
+    JsonObject* acct = Json.CreateObject(slon_mem_task);
+    JsonObject* source = Json.CreateObject(slon_mem_task);
 
     acct->set("id", id, JSON_STRING);
     acct->set("created_at", created_at, JSON_STRING);
@@ -135,8 +135,8 @@ U0 @slon_admin_create_account(SlonHttpSession* session)
     StrPrint(scratch_buffer, "https://%s/@%s", db->o("instance")->@("uri"), acct->@("username"));
     acct->set("url", scratch_buffer, JSON_STRING);
 
-    db->a("accounts")->append(Json.CreateItem(acct, JSON_OBJECT));
-    db->o("statuses")->set(acct->@("id"), Json.CreateArray(), JSON_ARRAY);
+    db->a("accounts")->append(acct);
+    db->o("statuses")->set(acct->@("id"), Json.CreateArray(slon_mem_task), JSON_ARRAY);
     @slon_admin_create_ap_actor(session, acct);
 
     @slon_db_instance_update_user_count;
@@ -180,7 +180,7 @@ U0 @slon_admin_settings_apps_get(SlonHttpSession* session, U8* buf)
     no_warn scratch_buffer, request_json;
     String.Append(buf, "settings/apps");
     String.Append(buf, "<br><br>");
-    U8* tmp = Json.Stringify(db->o("apps"));
+    U8* tmp = Json.Stringify(db->o("apps"), slon_mem_task);
     String.Append(buf, tmp);
     Free(tmp);
 }
@@ -191,7 +191,7 @@ U0 @slon_admin_settings_oauth_get(SlonHttpSession* session, U8* buf)
     no_warn scratch_buffer, request_json;
     String.Append(buf, "settings/oauth");
     String.Append(buf, "<br><br>");
-    U8* tmp = Json.Stringify(db->o("oauth"));
+    U8* tmp = Json.Stringify(db->o("oauth"), slon_mem_task);
     String.Append(buf, tmp);
     Free(tmp);
 }
@@ -267,17 +267,17 @@ U0 @slon_admin_manage_accounts(SlonHttpSession* session)
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn scratch_buffer;
 
-    JsonArray* results = Json.CreateArray();
+    JsonArray* results = Json.CreateArray(slon_mem_task);
     I64 skip = Str2I64(request_json->@("skip"));
     I64 limit = 10;
     I64 i;
     I64 count = 0;
     JsonArray* accounts = db->a("accounts");
     for (i = skip; i < accounts->length && i < skip + limit; i++) {
-        results->append(Json.CreateItem(accounts->@(i), JSON_OBJECT));
+        results->append(accounts->@(i));
         ++count;
     }
-    JsonObject* o = Json.CreateObject();
+    JsonObject* o = Json.CreateObject(slon_mem_task);
     o->set("total", accounts->length, JSON_NUMBER);
     o->set("skip", skip, JSON_NUMBER);
     o->set("count", count, JSON_NUMBER);

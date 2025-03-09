@@ -24,8 +24,8 @@
     U8 scratch_buffer[256];                  \
     JsonObject* request_json = @slon_http_request_json(session);
 
-JsonObject* SLON_HTTP_STATUS_CODES = Json.ParseFile("M:/Slon/Settings/status_codes.json");
-JsonArray* SLON_TLDS = Json.ParseFile("M:/Slon/Settings/tlds.json");
+JsonObject* SLON_HTTP_STATUS_CODES = Json.ParseFile("M:/Slon/Settings/status_codes.json", slon_mem_task);
+JsonArray* SLON_TLDS = Json.ParseFile("M:/Slon/Settings/tlds.json", slon_mem_task);
 
 I64 tld_cnt = 0;
 U8** tld_array = CAlloc(sizeof(U8*) * SLON_TLDS->length);
@@ -175,10 +175,11 @@ JsonObject* @slon_http_request_json(SlonHttpSession* session)
 
 U0 @slon_http_set_header(SlonHttpSession* session, U8* key, U8* value)
 {
+    JsonObject* headers = session->response->headers;
     if (!StrICmp(value, "")) {
-        Json.Unset(session->response->headers, key);
+        headers->unset(key);
     } else {
-        Json.Set(session->response->headers, key, value, JSON_STRING);
+        headers->set(key, value, JSON_STRING);
     }
 }
 
@@ -192,7 +193,7 @@ U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
     session->status(200);
     session->content_type("application/activity+json; charset=utf-8");
-    U8* json_string = Json.Stringify(json);
+    U8* json_string = Json.Stringify(json, slon_mem_task);
     session->response->data = @slon_strnew(session, json_string);
     session->response->size = StrLen(session->response->data);
     Free(json_string);
@@ -203,7 +204,7 @@ U0 @slon_http_send_json(SlonHttpSession* session, U64 json)
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
     session->status(200);
     session->content_type("application/json; charset=utf-8");
-    U8* json_string = Json.Stringify(json);
+    U8* json_string = Json.Stringify(json, slon_mem_task);
     session->response->data = @slon_strnew(session, json_string);
     session->response->size = StrLen(session->response->data);
     Free(json_string);
@@ -297,7 +298,7 @@ I64 @slon_http_request_verb(SlonHttpSession* session, Bool return_str = FALSE)
 
 U8* @slon_http_request_header(SlonHttpSession* session, U8* key)
 {
-    U64 value = Json.Get(session->request->headers, key);
+    U64 value = session->request->headers->@(key);
     if (!value)
         return "";
     return value;

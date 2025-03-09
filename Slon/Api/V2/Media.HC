@@ -36,14 +36,14 @@ U0 @slon_api_v2_media_post(SlonHttpSession* session)
         FileWrite(scratch_buffer, file->buffer, file->size);
 
         // Create media object
-        JsonObject* media_object = Json.CreateObject();
+        JsonObject* media_object = Json.CreateObject(slon_mem_task);
         media_object->set("id", media_id, JSON_STRING);
         media_object->set("type", "image", JSON_STRING);
         media_object->set("url", NULL, JSON_NULL);
         media_object->set("preview_url", NULL, JSON_NULL);
         media_object->set("remote_url", NULL, JSON_NULL);
-        media_object->set("meta", Json.CreateObject(), JSON_OBJECT);
-        media_object->o("meta")->set("original", Json.CreateObject(), JSON_OBJECT);
+        media_object->set("meta", Json.CreateObject(slon_mem_task), JSON_OBJECT);
+        media_object->o("meta")->set("original", Json.CreateObject(slon_mem_task), JSON_OBJECT);
         media_object->o("meta")->o("original")->set("width", width, JSON_NUMBER);
         media_object->o("meta")->o("original")->set("height", height, JSON_NUMBER);
         media_object->set("description", NULL, JSON_NULL);

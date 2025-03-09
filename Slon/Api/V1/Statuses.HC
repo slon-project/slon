@@ -7,13 +7,13 @@ JsonArray* @slon_api_v1_statuses_find_descendants_by_id(U8* id)
         return NULL;
     }
 
-    JsonArray* arr = Json.CreateArray();
+    JsonArray* arr = Json.CreateArray(slon_mem_task);
     JsonObject* status = NULL;
     JsonKey* key = db->o("statuses")->keys;
     while (key) {
         status = @slon_api_status_lookup_by_in_reply_to_id(id, key->value);
         if (status) {
-            arr->append(Json.CreateItem(status, JSON_OBJECT));
+            arr->append(status);
         }
         key = key->next;
     }
@@ -56,7 +56,7 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
     if (request_json->@("since_id") && StrLen(request_json->@("since_id")) > 0 && !min_id) {
         min_id = Str2I64(request_json->@("since_id"));
     }
-    JsonArray* statuses = Json.CreateArray();
+    JsonArray* statuses = Json.CreateArray(slon_mem_task);
     JsonObject* status = NULL;
     if (status_array && status_array->length) {
         for (i = status_array->length - 1; i > -1; i--) {
@@ -72,7 +72,7 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
             if (min_id > 0 && status_id <= min_id) {
                 exclude_status = TRUE;
             }
-            if (only_media && !Json.Get(status, "media_attachments")(JsonArray*)->length) {
+            if (only_media && !status->a("media_attachments")->length) {
                 exclude_status = TRUE;
             }
             if (exclude_replies && StrLen(status->@("in_reply_to_acct_id")) > 0 && StrICmp(account_id, status->@("in_reply_to_acct_id"))) {
@@ -82,7 +82,7 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
                 exclude_status = TRUE;
             }
             if (!exclude_status) {
-                statuses->append(Json.CreateItem(status, JSON_OBJECT));
+                statuses->append(status);
                 count++;
             }
             if (limit > 0 && count >= limit) {
@@ -91,7 +91,6 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
         }
     }
     session->send(statuses);
-    Json.Delete(statuses);
 }
 
 U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
@@ -121,7 +120,7 @@ U0 @slon_api_v1_statuses_delete(SlonHttpSession* session)
         for (i = 0; i < statuses->length; i++) {
             status = statuses->@(i);
             if (!StrICmp(status->@("id"), id)) {
-                fedi_status = Json.Clone(status);
+                fedi_status = Json.Clone(status, slon_mem_task);
                 status->set("deleted", TRUE, JSON_BOOLEAN);
                 media_attachments = status->a("media_attachments");
                 if (db->o("settings")->@("catbox_userhash") && media_attachments && media_attachments->length) {
@@ -174,8 +173,8 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
     if (@slon_api_authorized(session)) {
 
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
-            JsonObject* context = Json.CreateObject();
-            context->set("ancestors", Json.CreateArray(), JSON_ARRAY);
+            JsonObject* context = Json.CreateObject(slon_mem_task);
+            context->set("ancestors", Json.CreateArray(slon_mem_task), JSON_ARRAY);
 
             // Get ancestors
             id = session->path(3);
@@ -183,7 +182,7 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
             while (status && status->@("in_reply_to_id")) {
                 status = @slon_api_find_status_by_id(status->@("in_reply_to_id"), status->@("in_reply_to_acct_id"));
                 if (status) {
-                    context->a("ancestors")->append(Json.CreateItem(status, JSON_OBJECT));
+                    context->a("ancestors")->append(status);
                 }
             }
 
@@ -233,19 +232,19 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
             idempotency_key_already_seen = TRUE;
         }
         if (!idempotency_key_already_seen) {
-            Json.Set(db->o("idempotency_keys"), idempotency_key, Now, JSON_NUMBER);
+            db->o("idempotency_keys")->set(idempotency_key, Now, JSON_NUMBER);
         }
 
         id = @slon_api_generate_unique_id(session);
         U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
 
-        JsonObject* app_object = db->o("apps")->@(Json.Get(session->auth, "client_id"));
+        JsonObject* app_object = db->o("apps")->@(session->auth->@("client_id"));
 
-        JsonObject* status_app = Json.CreateObject();
+        JsonObject* status_app = Json.CreateObject(slon_mem_task);
         status_app->set("name", app_object->@("name"), JSON_STRING);
         status_app->set("website", app_object->@("website"), JSON_STRING);
 
-        JsonObject* account_object = Json.Clone(@slon_api_account_by_id(account_id));
+        JsonObject* account_object = Json.Clone(@slon_api_account_by_id(account_id), slon_mem_task);
         account_object->unset("source");
 
         // U8* language = request_json->@("language");
@@ -271,7 +270,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         // Mastodon iOS app lets us post with +:    reblogs_count, favourites_count, emojis, tags, mentions
         // IceCubesApp lets us post with +:         media_attachments, replies_count, spoiler_text, sensitive
 
-        JsonObject* status = Json.CreateObject();
+        JsonObject* status = Json.CreateObject(slon_mem_task);
         JsonObject* reply_to_status = NULL;
         JsonArray* media_attachments = NULL;
         String.Trim(request_json->@("status"));
@@ -290,11 +289,11 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
         if (request_json->@("media_ids") && request_json->a("media_ids")->length) {
             I64 i;
-            media_attachments = Json.CreateArray();
+            media_attachments = Json.CreateArray(slon_mem_task);
             for (i = 0; i < request_json->a("media_ids")->length; i++) {
                 U8* media_id = request_json->a("media_ids")->@(i);
                 if (media_id && db->o("media")->o(media_id)) {
-                    media_attachments->append(Json.CreateItem(db->o("media")->o(media_id), JSON_OBJECT));
+                    media_attachments->append(db->o("media")->o(media_id));
                 }
             }
             status->set("media_attachments", media_attachments, JSON_ARRAY);
@@ -316,18 +315,11 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         if (!idempotency_key_already_seen) {
             @slon_api_create_status(status, account_id);
             if (@slon_api_status_create_fedi) {
-                @slon_api_status_create_fedi(Json.Clone(status));
+                @slon_api_status_create_fedi(Json.Clone(status, slon_mem_task));
             }
         }
 
         session->send(status);
-
-        if (media_attachments) {
-            Json.Delete(media_attachments);
-        }
-        Json.Delete(status_app);
-        Json.Delete(account_object);
-        Json.Delete(app_object);
 
         @slon_free(session, uri);
         @slon_free(session, url);

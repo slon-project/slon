@@ -126,7 +126,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
             return FALSE;
         }
 
-        JsonObject* user_object = Json.Parse(resp->body.data);
+        JsonObject* user_object = Json.Parse(resp->body.data, slon_mem_task);
         Free(fetch_buffer);
 
         if (!user_object) {
@@ -179,14 +179,12 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
         U8* der_buf = @base64_decode(pem_single_line, &der_buf_length);
 
         // Cache the public key
-        JsonObject* cached_key = Json.CreateObject();
+        JsonObject* cached_key = Json.CreateObject(slon_mem_task);
         cached_key->set("key", der_buf, JSON_NUMBER);
         cached_key->set("length", der_buf_length, JSON_NUMBER);
         db->o("public_keys")->set(keyId, cached_key, JSON_OBJECT);
 
         @slon_free(session, pem_single_line);
-
-        Json.Delete(user_object);
     }
 
     // Calculate our signature string allocation
@@ -286,14 +284,14 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
         return NULL;
     }
 
-    JsonObject* http_headers = Json.CreateObject();
+    JsonObject* http_headers = Json.CreateObject(slon_mem_task);
 
     U8 scratch_buffer[2048];
     U8* request_object_s = NULL;
 
     if (request_object) {
         signatory = request_object->@("actor");
-        request_object_s = Json.Stringify(request_object);
+        request_object_s = Json.Stringify(request_object, slon_mem_task);
         U8 content_hash[32];
         calc_sha_256(content_hash, request_object_s, StrLen(request_object_s));
         U8* computed_digest = @base64_encode(content_hash, 32);
@@ -339,7 +337,7 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
     JsonObject* private_key_binary = db->o("private_keys_binary")->o(user);
     if (!private_key_binary) {
         I64 private_key_binary_size = 0;
-        private_key_binary = Json.CreateObject();
+        private_key_binary = Json.CreateObject(slon_mem_task);
         private_key_binary->set("data", @base64_decode(db->o("private_keys")->@(user), &private_key_binary_size), JSON_OBJECT);
         private_key_binary->set("size", private_key_binary_size, JSON_NUMBER);
         db->o("private_keys_binary")->set(user, private_key_binary, JSON_OBJECT);
@@ -397,7 +395,10 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
         Free(request_object_s);
     }
 
+    resp->body.data[resp->body.length] = NULL;
+
     AdamLog("code: %d\n", resp->status.code);
+    AdamLog(resp->body.data);
 
     return resp;
     // FIXME: Free url
@@ -416,7 +417,7 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
     U8* this_actor = db->o("actors")->o(o->@("user"))->@("id");
 
     StrPrint(scratch_buffer, "%s/accept/%d", this_actor, Now);
-    JsonObject* accept_object = Json.CreateObject();
+    JsonObject* accept_object = Json.CreateObject(slon_mem_task);
     accept_object->set("@context", request->@("@context"), JSON_STRING);
     accept_object->set("id", scratch_buffer, JSON_STRING);
     accept_object->set("type", "Accept", JSON_STRING);
@@ -427,7 +428,6 @@ U0 @slon_activitypub_async_accept_request(JsonObject* o)
     StrPrint(scratch_buffer, "%s/inbox", o->@("actor_for_key_id"));
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, accept_object);
     Free(fetch_buffer);
-    Json.Delete(accept_object);
 }
 
 U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
@@ -440,7 +440,7 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     U8* this_actor = StrNew(status->@("uri"), slon_mem_task);
     StrFind("/statuses/", this_actor)[0] = NULL;
 
-    JsonObject* create_object = Json.CreateObject();
+    JsonObject* create_object = Json.CreateObject(slon_mem_task);
     JsonObject* reply_to_status = NULL;
 
     create_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
@@ -449,19 +449,19 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     create_object->set("type", "Create", JSON_STRING);
     create_object->set("actor", this_actor, JSON_STRING);
     create_object->set("published", status->@("created_at"), JSON_STRING);
-    create_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]"), JSON_ARRAY);
-    JsonArray* cc = Json.CreateArray();
+    create_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]", slon_mem_task), JSON_ARRAY);
+    JsonArray* cc = Json.CreateArray(slon_mem_task);
     StrPrint(scratch_buffer, "%s/followers", this_actor);
-    cc->append(Json.CreateItem(scratch_buffer, JSON_STRING));
+    cc->append(scratch_buffer, JSON_STRING);
     create_object->set("cc", cc, JSON_ARRAY);
 
-    JsonObject* note_object = Json.CreateObject();
+    JsonObject* note_object = Json.CreateObject(slon_mem_task);
     note_object->set("id", status->@("uri"), JSON_STRING);
     note_object->set("type", "Note", JSON_STRING);
     note_object->set("summary", NULL, JSON_NULL);
     note_object->set("published", status->@("created_at"), JSON_STRING);
     note_object->set("attributedTo", this_actor, JSON_STRING);
-    note_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]"), JSON_ARRAY);
+    note_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]", slon_mem_task), JSON_ARRAY);
     note_object->set("cc", cc, JSON_ARRAY);
     note_object->set("sensitive", status->@("sensitive"), JSON_BOOLEAN);
     note_object->set("atomUri", status->@("uri"), JSON_STRING);
@@ -476,24 +476,24 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
         note_object->set("inReplyToAtomUri", NULL, JSON_NULL);
     }
     note_object->set("content", status->@("content"), JSON_STRING);
-    JsonObject* content_map = Json.CreateObject();
+    JsonObject* content_map = Json.CreateObject(slon_mem_task);
     content_map->set("en", status->@("content"), JSON_STRING);
     note_object->set("contentMap", content_map, JSON_OBJECT);
     JsonArray* attachment_array = NULL;
     if (status->@("media_attachments") && status->a("media_attachments")->length) {
-        attachment_array = Json.CreateArray();
+        attachment_array = Json.CreateArray(slon_mem_task);
         JsonArray* media_attachments = status->a("media_attachments");
         JsonObject* masto_attachment = NULL;
         JsonObject* ap_attachment = NULL;
         for (i = 0; i < media_attachments->length; i++) {
             masto_attachment = media_attachments->@(i);
-            ap_attachment = Json.CreateObject();
+            ap_attachment = Json.CreateObject(slon_mem_task);
             StrPrint(scratch_buffer, "image/%s", StrFind(".", StrFind("catbox.moe/", masto_attachment->@("url")) + 11) + 1);
             ap_attachment->set("mediaType", scratch_buffer, JSON_STRING);
             ap_attachment->set("url", masto_attachment->@("url"), JSON_STRING);
             ap_attachment->set("width", masto_attachment->o("meta")->o("original")->@("width"), JSON_NUMBER);
             ap_attachment->set("height", masto_attachment->o("meta")->o("original")->@("height"), JSON_NUMBER);
-            attachment_array->append(Json.CreateItem(ap_attachment, JSON_OBJECT));
+            attachment_array->append(ap_attachment, JSON_OBJECT);
         }
         note_object->set("attachment", attachment_array, JSON_ARRAY);
     } else {
@@ -509,10 +509,6 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     StrPrint(scratch_buffer, "%s/inbox", dest);
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, create_object);
     Free(fetch_buffer);
-    if (attachment_array) {
-        Json.Delete(attachment_array);
-    }
-    Json.Delete(create_object);
 }
 
 U0 @slon_activitypub_async_create_status(JsonObject* status)
@@ -535,16 +531,16 @@ U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
     U8* this_actor = StrNew(status->@("uri"), slon_mem_task);
     StrFind("/statuses/", this_actor)[0] = NULL;
 
-    JsonObject* delete_object = Json.CreateObject();
+    JsonObject* delete_object = Json.CreateObject(slon_mem_task);
 
     delete_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
     StrPrint(scratch_buffer, "%s#delete", status->@("uri"));
     delete_object->set("id", scratch_buffer, JSON_STRING);
     delete_object->set("type", "Delete", JSON_STRING);
     delete_object->set("actor", this_actor, JSON_STRING);
-    delete_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]"), JSON_ARRAY);
+    delete_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]", slon_mem_task), JSON_ARRAY);
 
-    JsonObject* ts_object = Json.CreateObject();
+    JsonObject* ts_object = Json.CreateObject(slon_mem_task);
     ts_object->set("id", status->@("uri"), JSON_STRING);
     ts_object->set("type", "Tombstone", JSON_STRING);
     ts_object->set("atomUri", status->@("uri"), JSON_STRING);
@@ -554,7 +550,6 @@ U0 @slon_activitypub_async_delete_status_to(JsonObject* status, U8* dest)
     StrPrint(scratch_buffer, "%s/inbox", dest);
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, delete_object);
     Free(fetch_buffer);
-    Json.Delete(delete_object);
 }
 
 U0 @slon_activitypub_async_follow(JsonObject* follow)
@@ -565,7 +560,6 @@ U0 @slon_activitypub_async_follow(JsonObject* follow)
     StrPrint(scratch_buffer, "%s/inbox", follow->@("object"));
     @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, follow);
     Free(fetch_buffer);
-    Json.Delete(follow);
 }
 
 U0 @slon_activitypub_async_delete_status(JsonObject* status)
@@ -610,7 +604,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     if (account) {
         return account;
     }
-    account = Json.CreateObject();
+    account = Json.CreateObject(slon_mem_task);
 
     HttpUrl* url = @http_parse_url(remote_actor);
     if (!url) {
@@ -619,7 +613,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
     }
 
     U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
-    JsonObject* http_headers = Json.CreateObject();
+    JsonObject* http_headers = Json.CreateObject(slon_mem_task);
     http_headers->set("accept", "application/json", JSON_STRING);
     @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
 
@@ -639,7 +633,7 @@ JsonObject* @slon_activitypub_get_account_for_remote_actor(SlonHttpSession* sess
         return NULL;
     }
 
-    JsonObject* actor_object = Json.Parse(resp->body.data);
+    JsonObject* actor_object = Json.Parse(resp->body.data, slon_mem_task);
     account = @slon_accounts_create_local_for_remote_actor(session, actor_object, remote_actor, url);
     Free(fetch_buffer);
 
@@ -696,7 +690,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             }
         }
         @slon_db_save_statuses_to_disk;
-        request_object = Json.Clone(request_json);
+        request_object = Json.Clone(request_json, slon_mem_task);
     }
 
     if (!StrICmp("follow", request_json->@("type"))) {
@@ -705,7 +699,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             return;
         }
         if (!db->o("followers")->@(user)) {
-            db->o("followers")->set(user, Json.CreateArray(), JSON_ARRAY);
+            db->o("followers")->set(user, Json.CreateArray(slon_mem_task), JSON_ARRAY);
         }
         followers = db->o("followers")->a(user);
         for (i = 0; i < followers->length; i++) {
@@ -714,12 +708,12 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             }
         }
         if (!already_following) {
-            followers->append(Json.CreateItem(request_json->@("actor"), JSON_STRING));
+            followers->append(request_json->@("actor"), JSON_STRING);
             account->set("followers_count", account->@("followers_count") + 1);
             @slon_db_save_followers_to_disk;
             @slon_db_save_account_to_disk(account);
         }
-        request_object = Json.Clone(request_json);
+        request_object = Json.Clone(request_json, slon_mem_task);
     }
 
     if (!StrICmp("create", request_json->@("type"))) {
@@ -807,10 +801,10 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             }
         }
 
-        JsonObject* new_status = Json.CreateObject();
+        JsonObject* new_status = Json.CreateObject(slon_mem_task);
         U8* id = @slon_api_generate_unique_id(session);
 
-        JsonArray* media_attachments = Json.CreateArray();
+        JsonArray* media_attachments = Json.CreateArray(slon_mem_task);
         if (request_json->o("object")->@("attachment")) {
             JsonObject* attachment_item = NULL;
             JsonObject* media_attachment = NULL;
@@ -819,15 +813,15 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             for (i = 0; i < attachment_array->length; i++) {
                 attachment_item = attachment_array->o(i);
                 if (attachment_item && attachment_item->@("mediaType") && String.BeginsWith("image", attachment_item->@("mediaType"))) {
-                    media_attachment = Json.CreateObject();
-                    media_meta = Json.CreateObject();
+                    media_attachment = Json.CreateObject(slon_mem_task);
+                    media_meta = Json.CreateObject(slon_mem_task);
                     media_attachment->set("id", "", JSON_STRING);
                     media_attachment->set("type", "image", JSON_STRING);
                     media_attachment->set("url", attachment_item->@("url"), JSON_STRING);
                     media_attachment->set("preview_url", NULL, JSON_NULL);
                     media_attachment->set("remote_url", NULL, JSON_NULL);
                     if (attachment_item->@("width") && attachment_item->@("height")) {
-                        media_meta->set("original", Json.CreateObject(), JSON_OBJECT);
+                        media_meta->set("original", Json.CreateObject(slon_mem_task), JSON_OBJECT);
                         media_meta->o("original")->set("width", attachment_item->@("width"), JSON_NUMBER);
                         media_meta->o("original")->set("height", attachment_item->@("height"), JSON_NUMBER);
                     }
@@ -842,7 +836,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
                         media_attachment->set("blurhash", NULL, JSON_NULL);
                     }
                     media_attachment->set("meta", media_meta, JSON_OBJECT);
-                    media_attachments->append(Json.CreateItem(media_attachment, JSON_OBJECT));
+                    media_attachments->append(media_attachment);
                 }
             }
         }
@@ -876,7 +870,7 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
         @slon_api_create_status(new_status, remote_account->@("id"), user);
 
         @slon_free(session, id);
-        request_object = Json.CreateObject();
+        request_object = Json.CreateObject(slon_mem_task);
         request_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
         request_object->set("id", request_json->@("id"), JSON_STRING);
         request_object->set("type", request_json->@("type"), JSON_STRING);
@@ -900,11 +894,11 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             }
         }
         @slon_db_save_status_to_disk(status);
-        request_object = Json.Clone(request_json);
+        request_object = Json.Clone(request_json, slon_mem_task);
     }
 
     if (request_object) {
-        JsonObject* o = Json.CreateObject();
+        JsonObject* o = Json.CreateObject(slon_mem_task);
         o->set("actor_for_key_id", session->actor_for_key_id, JSON_STRING);
         o->set("user", user, JSON_STRING);
         o->set("request", request_object, JSON_OBJECT);

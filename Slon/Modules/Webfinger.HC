@@ -7,29 +7,28 @@ U0 @slon_webfinger(SlonHttpSession* session)
         resource = StrFind(":", resource) + 1;
         StrFind("@", resource)[0] = NULL;
         if (db->o("actors")->@(resource)) {
-            JsonObject* webfinger_object = Json.CreateObject();
+            JsonObject* webfinger_object = Json.CreateObject(slon_mem_task);
 
             StrPrint(scratch_buffer, "acct:%s@%s", resource, db->o("instance")->@("uri"));
             webfinger_object->set("subject", scratch_buffer, JSON_STRING);
 
-            JsonArray* aliases = Json.CreateArray();
+            JsonArray* aliases = Json.CreateArray(slon_mem_task);
             StrPrint(scratch_buffer, "https://%s/@%s", db->o("instance")->@("uri"), resource);
-            aliases->append(Json.CreateItem(scratch_buffer, JSON_STRING));
+            aliases->append(scratch_buffer, JSON_STRING);
             StrPrint(scratch_buffer, "https://%s/users/%s", db->o("instance")->@("uri"), resource);
-            aliases->append(Json.CreateItem(scratch_buffer, JSON_STRING));
+            aliases->append(scratch_buffer, JSON_STRING);
             webfinger_object->set("aliases", aliases, JSON_ARRAY);
 
-            JsonArray* links = Json.CreateArray();
-            JsonObject* link_object = Json.CreateObject();
+            JsonArray* links = Json.CreateArray(slon_mem_task);
+            JsonObject* link_object = Json.CreateObject(slon_mem_task);
             link_object->set("rel", "self", JSON_STRING);
             link_object->set("type", "application/activity+json", JSON_STRING);
             StrPrint(scratch_buffer, "https://%s/users/%s", db->o("instance")->@("uri"), resource);
             link_object->set("href", scratch_buffer, JSON_STRING);
-            links->append(Json.CreateItem(link_object, JSON_OBJECT));
+            links->append(link_object);
             webfinger_object->set("links", links, JSON_ARRAY);
 
             session->send(webfinger_object);
-            Json.Delete(webfinger_object);
         } else {
             session->status(404);
         }

@@ -28,7 +28,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
     }
 
     U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
-    JsonObject* http_headers = Json.CreateObject();
+    JsonObject* http_headers = Json.CreateObject(slon_mem_task);
     http_headers->set("accept", "application/json", JSON_STRING);
     @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
 
@@ -50,7 +50,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
 
     Free(fetch_buffer);
 
-    JsonObject* webfinger_object = Json.Parse(resp->body.data);
+    JsonObject* webfinger_object = Json.Parse(resp->body.data, slon_mem_task);
     if (!webfinger_object) {
         @slon_log(LOG_HTTPD, "Error querying webfinger, object not present in response from remote server");
         return NULL;
@@ -94,7 +94,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
         return NULL;
     }
 
-    JsonObject* actor_object = Json.Parse(resp->body.data);
+    JsonObject* actor_object = Json.Parse(resp->body.data, slon_mem_task);
     JsonObject* account = @slon_accounts_create_local_for_remote_actor(session, actor_object, remote_actor, url);
     Free(fetch_buffer);
 
@@ -107,10 +107,10 @@ U0 @slon_api_v2_search_get(SlonHttpSession* session)
 
     if (@slon_api_authorized(session)) {
         // SLON_AUTH_ACCOUNT_ID
-        JsonObject* results = Json.CreateObject();
-        results->set("accounts", Json.CreateArray(), JSON_ARRAY);
-        results->set("statuses", Json.CreateArray(), JSON_ARRAY);
-        results->set("hashtags", Json.CreateArray(), JSON_ARRAY);
+        JsonObject* results = Json.CreateObject(slon_mem_task);
+        results->set("accounts", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+        results->set("statuses", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+        results->set("hashtags", Json.CreateArray(slon_mem_task), JSON_ARRAY);
 
         U8* q = request_json->@("q");
         if (!q) {
@@ -138,7 +138,7 @@ U0 @slon_api_v2_search_get(SlonHttpSession* session)
                     remote_account = @slon_api_v2_search_remote_account_from_webfinger(session, at_fragments[0], at_fragments[1]);
                 }
                 if (remote_account) {
-                    results->a("accounts")->append(Json.CreateItem(remote_account, JSON_OBJECT));
+                    results->a("accounts")->append(remote_account);
                 }
                 break;
             default:
@@ -151,7 +151,6 @@ U0 @slon_api_v2_search_get(SlonHttpSession* session)
 
     slon_api_v2_search_get_return:
         session->send(results);
-        Json.Delete(results);
     } else {
         session->status(401);
     }

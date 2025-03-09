@@ -1,5 +1,5 @@
 #define SLON_API_LOCAL_TIME_OFFSET 3550
-#define SLON_AUTH_ACCOUNT_ID U8* account_id = Json.Get(session->auth, "account_id");
+#define SLON_AUTH_ACCOUNT_ID U8* account_id = session->auth->@("account_id");
 
 extern @http_response* @slon_activitypub_signed_request(U8* url_string, U8* fetch_buffer, JsonObject* request_object = NULL, I64 verb = SLON_HTTP_VERB_POST, U8* signatory = NULL);
 
@@ -354,14 +354,14 @@ U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = 
         return;
     }
     if (!db->o("statuses")->a(account_id)) {
-        db->o("statuses")->set(account_id, Json.CreateArray(), JSON_ARRAY);
+        db->o("statuses")->set(account_id, Json.CreateArray(slon_mem_task), JSON_ARRAY);
     }
-    db->o("statuses")->a(account_id)->append(Json.CreateItem(status, JSON_OBJECT));
+    db->o("statuses")->a(account_id)->append(status);
     @slon_db_save_status_to_disk(status);
     @slon_db_instance_increment_status_count;
     @slon_db_save_instance_to_disk;
 
-    JsonObject* status_item = Json.CreateObject();
+    JsonObject* status_item = Json.CreateObject(slon_mem_task);
     status_item->set("account_id", account_id, JSON_STRING);
     status_item->set("status_id", status->@("id"), JSON_STRING);
 
@@ -369,18 +369,18 @@ U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = 
     JsonObject* acct = @slon_api_account_by_id(account_id);
     if (!acct->@("remote_actor") && !StrICmp("public", status->@("visibility"))) {
         if (!db->o("timelines")->a("public")) {
-            db->o("timelines")->set("public", Json.CreateArray(), JSON_ARRAY);
+            db->o("timelines")->set("public", Json.CreateArray(slon_mem_task), JSON_ARRAY);
         }
-        db->o("timelines")->a("public")->append(Json.CreateItem(status_item, JSON_OBJECT));
+        db->o("timelines")->a("public")->append(status_item);
     }
     // If account_id is a remote account, and we have an ActivityPub user, post to their timeline
     if (acct->@("remote_actor") && to_ap_user) {
         JsonObject* acct_for_ap_user = @slon_api_account_by_username(to_ap_user);
         if (acct_for_ap_user) {
             if (!db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))) {
-                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(), JSON_ARRAY);
+                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(slon_mem_task), JSON_ARRAY);
             }
-            db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))->append(Json.CreateItem(status_item, JSON_OBJECT));
+            db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))->append(status_item);
         }
     }
     @slon_db_save_timelines_to_disk;
@@ -411,7 +411,7 @@ JsonArray* @slon_api_status_array_from_timeline(JsonArray* timeline)
     if (!timeline) {
         return NULL;
     }
-    JsonArray* status_array = Json.CreateArray();
+    JsonArray* status_array = Json.CreateArray(slon_mem_task);
     JsonObject* timeline_item = NULL;
     JsonObject* status = NULL;
     I64 i;
@@ -419,7 +419,7 @@ JsonArray* @slon_api_status_array_from_timeline(JsonArray* timeline)
         timeline_item = timeline->@(i);
         status = @slon_api_get_timeline_item(timeline_item);
         if (status) {
-            status_array->append(Json.CreateItem(status, JSON_OBJECT));
+            status_array->append(status);
         }
     }
     return status_array;

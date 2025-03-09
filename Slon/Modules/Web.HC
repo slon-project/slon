@@ -15,7 +15,7 @@ U0 @slon_web_user_get(SlonHttpSession* session)
 
     I64 html_file_size;
     U8* html_file_data = FileRead("M:/Slon/Static/html/user.html", &html_file_size);
-    U8* user_file_data = Json.Stringify(actor);
+    U8* user_file_data = Json.Stringify(actor, slon_mem_task);
 
     U8* html_data = @slon_calloc(session, (html_file_size * 2) + (StrLen(user_file_data) * 2));
     String.Append(html_data, html_file_data);
