@@ -78,6 +78,7 @@ class SlonHttpResponse {
 
 class SlonHttpSession {
     U64 s;
+    CTask* mem_task;
     SlonHttpRequest* request;
     SlonHttpResponse* response;
     I64 bytes_used;

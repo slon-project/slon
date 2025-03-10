@@ -81,6 +81,7 @@ SlonHttpResponse* @slon_http_init_response(SlonHttpSession* session)
 SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 {
     SlonHttpSession* session = CAlloc(sizeof(SlonHttpSession), slon_mem_task);
+    session->mem_task = Fs;
     session->bytes_used = MSize2(session);
     session->s = s;
     session->request = @slon_http_init_request(session);
