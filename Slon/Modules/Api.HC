@@ -1,5 +1,9 @@
 #define SLON_API_LOCAL_TIME_OFFSET 3550
-#define SLON_AUTH_ACCOUNT_ID U8* account_id = session->auth->@("account_id");
+#define SLON_AUTH_ACCOUNT_ID                         \
+    U8* account_id = NULL;                           \
+    if (session->auth) {                             \
+        account_id = session->auth->@("account_id"); \
+    };
 
 extern @http_response* @slon_activitypub_signed_request(U8* url_string, U8* fetch_buffer, JsonObject* request_object = NULL, I64 verb = SLON_HTTP_VERB_POST, U8* signatory = NULL);
 
