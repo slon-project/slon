@@ -37,6 +37,7 @@ struct TcpSession {
     pending_data_to_transmit: [u8]
     received_data: [u8]
     received_frames: [[u8]]
+    is_bound_socket: bool
     socket: u64
 }
 
@@ -1037,7 +1038,8 @@ class TCPIP {
                         client_is_not_ready_to_receive_data = s[6];"
                     }
                 }
-                if (client_is_not_ready_to_receive_data == 0) {
+                let is_bound_socket = .tcp_sessions[i].is_bound_socket
+                if (not is_bound_socket and client_is_not_ready_to_receive_data == 0) or (is_bound_socket) {
                     // really close the connection
                     unsafe {
                         cpp {
@@ -1457,6 +1459,7 @@ class TCPIP {
                 pending_data_to_transmit: []
                 received_data: []
                 received_frames: []
+                is_bound_socket: true
                 socket)
             //println("Accepting connection from IPv4 address: {}", source_address)
             session.timestamp_last_echo_reply = echo_reply
@@ -1661,6 +1664,7 @@ class TCPIP {
                 pending_data_to_transmit: []
                 received_data: []
                 received_frames: []
+                is_bound_socket: false
                 socket)
             .tcp_syn_packet(session)
             .tcp_update_socket_session_state(session.state, session.socket)
