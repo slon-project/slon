@@ -152,6 +152,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
     no_warn scratch_buffer;
 
     I64 i;
+    I64 j;
 
     JsonObject* acct = NULL;
     if (!StrICmp("relationships", session->path(3))) {
@@ -169,8 +170,8 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                             JsonObject* my_account = @slon_api_account_by_id(session->auth->@("account_id"));
                             JsonArray* my_followers = db->o("followers")->a(my_account->@("username"));
                             if (my_followers) {
-                                for (i = 0; i < my_followers->length; i++) {
-                                    if (my_followers->@(i) && !StrICmp(my_followers->@(i), target_account->@("remote_actor"))) {
+                                for (j = 0; j < my_followers->length; j++) {
+                                    if (my_followers->@(j) && !StrICmp(my_followers->@(j), target_account->@("remote_actor"))) {
                                         followed_by = TRUE;
                                         break;
                                     }
@@ -178,8 +179,8 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                             }
                             JsonArray* my_following = db->o("following")->a(my_account->@("username"));
                             if (my_following) {
-                                for (i = 0; i < my_following->length; i++) {
-                                    if (my_following->@(i) && !StrICmp(my_following->@(i), target_account->@("remote_actor"))) {
+                                for (j = 0; j < my_following->length; j++) {
+                                    if (my_following->@(j) && !StrICmp(my_following->@(j), target_account->@("remote_actor"))) {
                                         following = TRUE;
                                         break;
                                     }
