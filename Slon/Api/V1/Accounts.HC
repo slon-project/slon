@@ -1,9 +1,9 @@
 U0 (*@slon_api_follow_fedi)(JsonObject* follow) = NULL;
 extern U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array);
 
-JsonObject* @slon_accounts_default_relationship_object()
+JsonObject* @slon_accounts_default_relationship_object(SlonHttpSession* session)
 {
-    JsonObject* relationship = Json.CreateObject(slon_mem_task);
+    JsonObject* relationship = Json.CreateObject(session->mem_task);
     relationship->set("following", FALSE, JSON_BOOLEAN);
     relationship->set("showing_reblogs", TRUE, JSON_BOOLEAN);
     relationship->set("notifying", FALSE, JSON_BOOLEAN);
@@ -132,7 +132,7 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                         }
                     }
                 }
-                JsonObject* relationship = @slon_accounts_default_relationship_object;
+                JsonObject* relationship = @slon_accounts_default_relationship_object(session);
                 relationship->set("id", acct->@("id"), JSON_STRING);
                 relationship->set("following", TRUE, JSON_BOOLEAN);
                 relationship->set("followed_by", followed_by, JSON_BOOLEAN);
@@ -186,7 +186,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
                                 }
                             }
                         }
-                        JsonObject* relationship = @slon_accounts_default_relationship_object;
+                        JsonObject* relationship = @slon_accounts_default_relationship_object(session);
                         relationship->set("id", target_account->@("id"), JSON_STRING);
                         relationship->set("following", following, JSON_BOOLEAN);
                         relationship->set("followed_by", followed_by, JSON_BOOLEAN);
