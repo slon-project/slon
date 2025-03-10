@@ -51,6 +51,13 @@ I64 @t(Bool _condition, I64 _true, I64 _false)
     return _false;
 }
 
+U0 @slon_mem_task_loop()
+{
+    while (1) {
+        Sleep(1);
+    };
+}
+
 // Before doing anything else, we:
 
 // 1. Mark memory in code heap below 0x1000000 as used.
@@ -61,6 +68,26 @@ sys_code_bp->mem_free_lst = ShrinkMemBlkByPags(sys_code_bp->mem_free_lst, 131072
 
 // 3. Enable SSE
 @sse_enable;
+
+// 4. Init mem_tasks
+
+CTask* slon_mem_task = Spawn(&@slon_mem_task_loop, , "SlonMemTask");
+
+#define MALLOC_MEM_TASK_COUNT 4
+CTask** malloc_mem_task = CAlloc(sizeof(CTask*) * MALLOC_MEM_TASK_COUNT, slon_mem_task);
+I64 malloc_current_mem_task = 0;
+
+U0 @malloc_mem_tasks_init()
+{
+    U8* scratch_buffer[64];
+    I64 i;
+    for (i = 0; i < MALLOC_MEM_TASK_COUNT; i++) {
+        StrPrint(scratch_buffer, "SlonMallocTask%d", i);
+        malloc_mem_task[i] = Spawn(&@slon_mem_task_loop, , scratch_buffer);
+    }
+}
+
+@malloc_mem_tasks_init;
 
 U0 dd() { DocDump(adam_task->put_doc); }
 //@patch_jmp_rel32(&Dbg2, &Reboot); // Reboot instead of crashing to the debugger

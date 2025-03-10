@@ -118,11 +118,18 @@ U0 ntohs()
     POP_SYSV_REGS
 }
 
+U64 @malloc(I64 size)
+{
+    U64 res = MAlloc(size, malloc_mem_task[malloc_current_mem_task % MALLOC_MEM_TASK_COUNT]->code_heap);
+    malloc_current_mem_task++;
+    return res;
+}
+
 U0 malloc()
 {
     PUSH_SYSV_REGS
     GET_SYSV_ARGS
-    MAlloc(p0, slon_mem_task->code_heap);
+    @malloc(p0);
     POP_SYSV_REGS
 }
 
