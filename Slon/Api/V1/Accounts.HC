@@ -28,7 +28,7 @@ JsonObject* @slon_accounts_create_local_for_remote_actor(SlonHttpSession* sessio
 
     U8* id = @slon_api_generate_unique_id(session);
     U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
-    JsonObject* account = Json.CreateObject(slon_mem_task);
+    JsonObject* account = Json.CreateObject(slon_db_mem_task);
     account->set("id", id, JSON_STRING);
     account->set("created_at", created_at, JSON_STRING);
     account->set("username", actor_object->@("preferredUsername"), JSON_STRING);
@@ -115,7 +115,7 @@ U0 @slon_api_v1_accounts_post(SlonHttpSession* session)
                 }
                 // add to my following
                 if (!db->o("following")->a(my_acct->@("username"))) {
-                    db->o("following")->set(my_acct->@("username"), Json.CreateArray(slon_mem_task), JSON_ARRAY);
+                    db->o("following")->set(my_acct->@("username"), Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
                 }
                 db->o("following")->a(my_acct->@("username"))->append(acct->@("remote_actor"), JSON_STRING);
                 @slon_db_save_following_to_disk;
@@ -157,7 +157,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
     JsonObject* acct = NULL;
     if (!StrICmp("relationships", session->path(3))) {
         if (@slon_api_authorized(session)) {
-            JsonArray* relationships = Json.CreateArray(slon_mem_task);
+            JsonArray* relationships = Json.CreateArray(session->mem_task);
             JsonArray* relationship_of_ids = request_json->@("id");
             JsonObject* target_account = NULL;
             if (relationship_of_ids) {
@@ -236,7 +236,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
             session->status(404);
         } else {
             // Return the Account profile
-            JsonObject* profile_object = Json.Clone(acct, slon_mem_task);
+            JsonObject* profile_object = Json.Clone(acct, session->mem_task);
             profile_object->unset("source");
             session->send(profile_object);
         }
@@ -275,7 +275,7 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
             JsonObject* field_object;
 
             MemSet(fields_attributes_indexes, NULL, sizeof(I64) * 16);
-            JsonArray* fields_array = Json.CreateArray(slon_mem_task);
+            JsonArray* fields_array = Json.CreateArray(slon_db_mem_task);
             SlonCatboxUpload* cb = NULL;
             U8* media_id = NULL;
             U8* media_file_ext = NULL;
@@ -351,7 +351,7 @@ U0 @slon_api_v1_accounts_patch(SlonHttpSession* session)
                         field_object = update_field_index->value;
                         field_object->set("verified_at", NULL, JSON_NULL);
                         AdamLog("before stringify\n");
-                        AdamLog("%s\n", Json.Stringify(field_object, slon_mem_task));
+                        AdamLog("%s\n", Json.Stringify(field_object, session->mem_task));
                         AdamLog("after stringify\n");
                         fields_array->append(field_object, JSON_OBJECT);
                         update_field_index = update_field_index->next;

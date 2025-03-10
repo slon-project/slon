@@ -7,20 +7,20 @@ U0 @slon_webfinger(SlonHttpSession* session)
         resource = StrFind(":", resource) + 1;
         StrFind("@", resource)[0] = NULL;
         if (db->o("actors")->@(resource)) {
-            JsonObject* webfinger_object = Json.CreateObject(slon_mem_task);
+            JsonObject* webfinger_object = Json.CreateObject(session->mem_task);
 
             StrPrint(scratch_buffer, "acct:%s@%s", resource, db->o("instance")->@("uri"));
             webfinger_object->set("subject", scratch_buffer, JSON_STRING);
 
-            JsonArray* aliases = Json.CreateArray(slon_mem_task);
+            JsonArray* aliases = Json.CreateArray(session->mem_task);
             StrPrint(scratch_buffer, "https://%s/@%s", db->o("instance")->@("uri"), resource);
             aliases->append(scratch_buffer, JSON_STRING);
             StrPrint(scratch_buffer, "https://%s/users/%s", db->o("instance")->@("uri"), resource);
             aliases->append(scratch_buffer, JSON_STRING);
             webfinger_object->set("aliases", aliases, JSON_ARRAY);
 
-            JsonArray* links = Json.CreateArray(slon_mem_task);
-            JsonObject* link_object = Json.CreateObject(slon_mem_task);
+            JsonArray* links = Json.CreateArray(session->mem_task);
+            JsonObject* link_object = Json.CreateObject(session->mem_task);
             link_object->set("rel", "self", JSON_STRING);
             link_object->set("type", "application/activity+json", JSON_STRING);
             StrPrint(scratch_buffer, "https://%s/users/%s", db->o("instance")->@("uri"), resource);

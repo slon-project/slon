@@ -96,7 +96,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                 }
                 I64 created_at = ToF64(CDate2Unix(Now));
 
-                JsonObject* token_object = Json.CreateObject(slon_mem_task);
+                JsonObject* token_object = Json.CreateObject(slon_db_mem_task);
                 token_object->set("access_token", access_token, JSON_STRING);
                 token_object->set("token_type", "Bearer", JSON_STRING);
                 token_object->set("scope", "read write follow push", JSON_STRING);
@@ -117,7 +117,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                     authorization_code_exists = db->o("oauth")->o("codes")->@(authorization_code) > 0;
                 }
 
-                JsonObject* code_object = Json.CreateObject(slon_mem_task);
+                JsonObject* code_object = Json.CreateObject(slon_db_mem_task);
                 code_object->set("access_token", access_token, JSON_STRING);
                 code_object->set("token_type", "Bearer", JSON_STRING);
                 code_object->set("scope", "read write follow push", JSON_STRING);
@@ -130,7 +130,7 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                 @slon_db_save_oauth_to_disk;
 
                 StrPrint(scratch_buffer, "%s?code=%s", redirect_uri, authorization_code);
-                JsonObject* redirect_uri_object = Json.CreateObject(slon_mem_task);
+                JsonObject* redirect_uri_object = Json.CreateObject(session->mem_task);
                 redirect_uri_object->set("redirect_uri", scratch_buffer, JSON_STRING);
                 session->send(redirect_uri_object);
 

@@ -1,13 +1,13 @@
 U0 (*@slon_api_status_create_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_delete_fedi)(JsonObject* status) = NULL;
 
-JsonArray* @slon_api_v1_statuses_find_descendants_by_id(U8* id)
+JsonArray* @slon_api_v1_statuses_find_descendants_by_id(SlonHttpSession* session, U8* id)
 {
     if (!id) {
         return NULL;
     }
 
-    JsonArray* arr = Json.CreateArray(slon_mem_task);
+    JsonArray* arr = Json.CreateArray(session->mem_task);
     JsonObject* status = NULL;
     JsonKey* key = db->o("statuses")->keys;
     while (key) {
@@ -56,7 +56,7 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
     if (request_json->@("since_id") && StrLen(request_json->@("since_id")) > 0 && !min_id) {
         min_id = Str2I64(request_json->@("since_id"));
     }
-    JsonArray* statuses = Json.CreateArray(slon_mem_task);
+    JsonArray* statuses = Json.CreateArray(session->mem_task);
     JsonObject* status = NULL;
     if (status_array && status_array->length) {
         for (i = status_array->length - 1; i > -1; i--) {
@@ -173,8 +173,8 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
     if (@slon_api_authorized(session)) {
 
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
-            JsonObject* context = Json.CreateObject(slon_mem_task);
-            context->set("ancestors", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+            JsonObject* context = Json.CreateObject(session->mem_task);
+            context->set("ancestors", Json.CreateArray(session->mem_task), JSON_ARRAY);
 
             // Get ancestors
             id = session->path(3);
@@ -188,7 +188,7 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
 
             // Get descendants
             id = session->path(3);
-            context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(id), JSON_ARRAY);
+            context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(session, id), JSON_ARRAY);
 
             session->send(context);
             return;
@@ -240,11 +240,11 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
 
         JsonObject* app_object = db->o("apps")->@(session->auth->@("client_id"));
 
-        JsonObject* status_app = Json.CreateObject(slon_mem_task);
+        JsonObject* status_app = Json.CreateObject(slon_db_mem_task);
         status_app->set("name", app_object->@("name"), JSON_STRING);
         status_app->set("website", app_object->@("website"), JSON_STRING);
 
-        JsonObject* account_object = Json.Clone(@slon_api_account_by_id(account_id), slon_mem_task);
+        JsonObject* account_object = Json.Clone(@slon_api_account_by_id(account_id), slon_db_mem_task);
         account_object->unset("source");
 
         // U8* language = request_json->@("language");
@@ -270,7 +270,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         // Mastodon iOS app lets us post with +:    reblogs_count, favourites_count, emojis, tags, mentions
         // IceCubesApp lets us post with +:         media_attachments, replies_count, spoiler_text, sensitive
 
-        JsonObject* status = Json.CreateObject(slon_mem_task);
+        JsonObject* status = Json.CreateObject(slon_db_mem_task);
         JsonObject* reply_to_status = NULL;
         JsonArray* media_attachments = NULL;
         String.Trim(request_json->@("status"));
@@ -289,7 +289,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
         if (request_json->@("media_ids") && request_json->a("media_ids")->length) {
             I64 i;
-            media_attachments = Json.CreateArray(slon_mem_task);
+            media_attachments = Json.CreateArray(slon_db_mem_task);
             for (i = 0; i < request_json->a("media_ids")->length; i++) {
                 U8* media_id = request_json->a("media_ids")->@(i);
                 if (media_id && db->o("media")->o(media_id)) {

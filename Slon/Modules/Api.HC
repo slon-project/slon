@@ -358,14 +358,14 @@ U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = 
         return;
     }
     if (!db->o("statuses")->a(account_id)) {
-        db->o("statuses")->set(account_id, Json.CreateArray(slon_mem_task), JSON_ARRAY);
+        db->o("statuses")->set(account_id, Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
     }
     db->o("statuses")->a(account_id)->append(status);
     @slon_db_save_status_to_disk(status);
     @slon_db_instance_increment_status_count;
     @slon_db_save_instance_to_disk;
 
-    JsonObject* status_item = Json.CreateObject(slon_mem_task);
+    JsonObject* status_item = Json.CreateObject(slon_db_mem_task);
     status_item->set("account_id", account_id, JSON_STRING);
     status_item->set("status_id", status->@("id"), JSON_STRING);
 
@@ -373,7 +373,7 @@ U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = 
     JsonObject* acct = @slon_api_account_by_id(account_id);
     if (!acct->@("remote_actor") && !StrICmp("public", status->@("visibility"))) {
         if (!db->o("timelines")->a("public")) {
-            db->o("timelines")->set("public", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+            db->o("timelines")->set("public", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
         }
         db->o("timelines")->a("public")->append(status_item);
     }
@@ -382,7 +382,7 @@ U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = 
         JsonObject* acct_for_ap_user = @slon_api_account_by_username(to_ap_user);
         if (acct_for_ap_user) {
             if (!db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))) {
-                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(slon_mem_task), JSON_ARRAY);
+                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
             }
             db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))->append(status_item);
         }
@@ -410,12 +410,12 @@ JsonObject* @slon_api_get_timeline_item(JsonObject* timeline_item)
     return NULL;
 }
 
-JsonArray* @slon_api_status_array_from_timeline(JsonArray* timeline)
+JsonArray* @slon_api_status_array_from_timeline(SlonHttpSession* session, JsonArray* timeline)
 {
     if (!timeline) {
         return NULL;
     }
-    JsonArray* status_array = Json.CreateArray(slon_mem_task);
+    JsonArray* status_array = Json.CreateArray(session->mem_task);
     JsonObject* timeline_item = NULL;
     JsonObject* status = NULL;
     I64 i;

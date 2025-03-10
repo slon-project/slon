@@ -1,13 +1,13 @@
 U0 @slon_api_v1_timelines_home(SlonHttpSession* session, U8* account_id)
 {
     // Return the Account's Home timeline
-    @slon_api_v1_statuses_query(session, @slon_api_status_array_from_timeline(db->o("timelines")->o("home")->a(account_id)));
+    @slon_api_v1_statuses_query(session, @slon_api_status_array_from_timeline(session, db->o("timelines")->o("home")->a(account_id)));
 }
 
 U0 @slon_api_v1_timelines_public(SlonHttpSession* session)
 {
     // Return the Public timeline
-    @slon_api_v1_statuses_query(session, @slon_api_status_array_from_timeline(db->o("timelines")->a("public")));
+    @slon_api_v1_statuses_query(session, @slon_api_status_array_from_timeline(session, db->o("timelines")->a("public")));
 }
 
 U0 @slon_api_v1_timelines_get(SlonHttpSession* session)

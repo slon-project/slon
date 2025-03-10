@@ -98,7 +98,7 @@ U64 @slon_calloc(SlonHttpSession* session, I64 size)
 {
     if (!session || !size)
         return NULL;
-    U64 res = CAlloc(size, slon_mem_task);
+    U64 res = CAlloc(size, session->mem_task);
     session->bytes_used += MSize2(res);
     // AdamLog("@slon_calloc: requested %d, total used: %d\n", MSize2(res), session->bytes_used);
     return res;
@@ -117,7 +117,7 @@ U64 @slon_malloc(SlonHttpSession* session, I64 size)
 {
     if (!session || !size)
         return NULL;
-    U64 res = MAlloc(size, slon_mem_task);
+    U64 res = MAlloc(size, session->mem_task);
     session->bytes_used += MSize2(res);
     // AdamLog("@slon_malloc: requested %d, total used: %d\n", MSize2(res), session->bytes_used);
     return res;
@@ -127,7 +127,7 @@ U8* @slon_strnew(SlonHttpSession* session, U8* str)
 {
     if (!session || !str)
         return NULL;
-    U8* new = StrNew(str, slon_mem_task);
+    U8* new = StrNew(str, session->mem_task);
     session->bytes_used += MSize2(new);
     // AdamLog("@slon_strnew: requested %d, total used: %d\n", MSize2(new), session->bytes_used);
     // AdamLog("@slon_strnew: %s\n", new);
@@ -194,7 +194,7 @@ U0 @slon_http_send_ap_json(SlonHttpSession* session, U64 json)
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
     session->status(200);
     session->content_type("application/activity+json; charset=utf-8");
-    U8* json_string = Json.Stringify(json, slon_mem_task);
+    U8* json_string = Json.Stringify(json, session->mem_task);
     session->response->data = @slon_strnew(session, json_string);
     session->response->size = StrLen(session->response->data);
     Free(json_string);
@@ -205,7 +205,7 @@ U0 @slon_http_send_json(SlonHttpSession* session, U64 json)
     // a stringified copy of "json" is created, a strnew is sent, we clean up stringified copy, sender cleans up "json"
     session->status(200);
     session->content_type("application/json; charset=utf-8");
-    U8* json_string = Json.Stringify(json, slon_mem_task);
+    U8* json_string = Json.Stringify(json, session->mem_task);
     session->response->data = @slon_strnew(session, json_string);
     session->response->size = StrLen(session->response->data);
     Free(json_string);

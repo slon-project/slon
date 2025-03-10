@@ -27,8 +27,8 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
         return NULL;
     }
 
-    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
-    JsonObject* http_headers = Json.CreateObject(slon_mem_task);
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, session->mem_task);
+    JsonObject* http_headers = Json.CreateObject(session->mem_task);
     http_headers->set("accept", "application/json", JSON_STRING);
     @http_response* resp = Http.Get(url, fetch_buffer, NULL, http_headers);
 
@@ -50,7 +50,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
 
     Free(fetch_buffer);
 
-    JsonObject* webfinger_object = Json.Parse(resp->body.data, slon_mem_task);
+    JsonObject* webfinger_object = Json.Parse(resp->body.data, session->mem_task);
     if (!webfinger_object) {
         @slon_log(LOG_HTTPD, "Error querying webfinger, object not present in response from remote server");
         return NULL;
@@ -78,7 +78,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
     }
 
     // We have the remote actor uri, let's fetch and create a local account
-    fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
+    fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, session->mem_task);
     U8* signatory = db->o("actors")->o(@slon_api_account_by_id(account_id)->@("username"))->@("id");
     resp = @slon_activitypub_signed_request(remote_actor, fetch_buffer, NULL, SLON_HTTP_VERB_GET, signatory);
 
@@ -94,7 +94,7 @@ JsonObject* @slon_api_v2_search_remote_account_from_webfinger(SlonHttpSession* s
         return NULL;
     }
 
-    JsonObject* actor_object = Json.Parse(resp->body.data, slon_mem_task);
+    JsonObject* actor_object = Json.Parse(resp->body.data, session->mem_task);
     JsonObject* account = @slon_accounts_create_local_for_remote_actor(session, actor_object, remote_actor, url);
     Free(fetch_buffer);
 
@@ -107,10 +107,10 @@ U0 @slon_api_v2_search_get(SlonHttpSession* session)
 
     if (@slon_api_authorized(session)) {
         // SLON_AUTH_ACCOUNT_ID
-        JsonObject* results = Json.CreateObject(slon_mem_task);
-        results->set("accounts", Json.CreateArray(slon_mem_task), JSON_ARRAY);
-        results->set("statuses", Json.CreateArray(slon_mem_task), JSON_ARRAY);
-        results->set("hashtags", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+        JsonObject* results = Json.CreateObject(session->mem_task);
+        results->set("accounts", Json.CreateArray(session->mem_task), JSON_ARRAY);
+        results->set("statuses", Json.CreateArray(session->mem_task), JSON_ARRAY);
+        results->set("hashtags", Json.CreateArray(session->mem_task), JSON_ARRAY);
 
         U8* q = request_json->@("q");
         if (!q) {

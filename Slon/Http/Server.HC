@@ -10,7 +10,6 @@ SlonHttpBuffer* @slon_http_init_buffer(SlonHttpSession* session)
 
 U0 @slon_http_free_response(SlonHttpSession* session, SlonHttpResponse* response)
 {
-    // FIXME: Free headers JsonObject
     if (response) {
         if (response->buffer && response->buffer->data) {
             @slon_free(session, response->buffer->data);
@@ -22,7 +21,6 @@ U0 @slon_http_free_response(SlonHttpSession* session, SlonHttpResponse* response
 
 U0 @slon_http_free_request(SlonHttpSession* session, SlonHttpRequest* request)
 {
-    // FIXME: Free headers JsonObject
     if (request) {
         if (request->buffer && request->buffer->data) {
             @slon_free(session, request->buffer->data);
@@ -66,7 +64,7 @@ SlonHttpRequest* @slon_http_init_request(SlonHttpSession* session)
 {
     SlonHttpRequest* request = @slon_calloc(session, sizeof(SlonHttpRequest));
     request->buffer = @slon_http_init_buffer(session);
-    request->headers = Json.CreateObject(slon_mem_task);
+    request->headers = Json.CreateObject(session->mem_task);
     return request;
 }
 
@@ -74,7 +72,7 @@ SlonHttpResponse* @slon_http_init_response(SlonHttpSession* session)
 {
     SlonHttpResponse* response = @slon_calloc(session, sizeof(SlonHttpResponse));
     response->buffer = @slon_http_init_buffer(session);
-    response->headers = Json.CreateObject(slon_mem_task);
+    response->headers = Json.CreateObject(session->mem_task);
     return response;
 }
 
@@ -90,7 +88,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
     // Create a copy of function and patch status
     U64 a;
     I64 code_size = MSize(&@slon_session_status_wrapper_function);
-    session->status = CAlloc(code_size, slon_mem_task->code_heap);
+    session->status = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->status, &@slon_session_status_wrapper_function, code_size);
 
     a = session->status;
@@ -99,7 +97,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch header
     code_size = MSize(&@slon_session_header_wrapper_function);
-    session->header = CAlloc(code_size, slon_mem_task->code_heap);
+    session->header = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->header, &@slon_session_header_wrapper_function, code_size);
 
     a = session->header;
@@ -116,7 +114,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch send
     code_size = MSize(&@slon_session_send_wrapper_function);
-    session->send = CAlloc(code_size, slon_mem_task->code_heap);
+    session->send = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->send, &@slon_session_send_wrapper_function, code_size);
 
     a = session->send;
@@ -137,7 +135,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch verb
     code_size = MSize(&@slon_session_verb_wrapper_function);
-    session->verb = CAlloc(code_size, slon_mem_task->code_heap);
+    session->verb = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->verb, &@slon_session_verb_wrapper_function, code_size);
 
     a = session->verb;
@@ -150,7 +148,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch path
     code_size = MSize(&@slon_session_path_wrapper_function);
-    session->path = CAlloc(code_size, slon_mem_task->code_heap);
+    session->path = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->path, &@slon_session_path_wrapper_function, code_size);
 
     a = session->path;
@@ -163,7 +161,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch path_count
     code_size = MSize(&@slon_session_path_count_wrapper_function);
-    session->path_count = CAlloc(code_size, slon_mem_task->code_heap);
+    session->path_count = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->path_count, &@slon_session_path_count_wrapper_function, code_size);
 
     a = session->path_count;
@@ -172,7 +170,7 @@ SlonHttpSession* @slon_http_init_session(TcpSocket* s)
 
     // Create a copy of function and patch content_type
     code_size = MSize(&@slon_session_content_type_wrapper_function);
-    session->content_type = CAlloc(code_size, slon_mem_task->code_heap);
+    session->content_type = CAlloc(code_size, session->mem_task->code_heap);
     MemCpy(session->content_type, &@slon_session_content_type_wrapper_function, code_size);
 
     a = session->content_type;
@@ -322,7 +320,7 @@ U0 @slon_http_debug_print_request(SlonHttpSession* session, Bool show_headers = 
 {
     AdamLog("[httpd] %d => request: %s %s\n", session->s, session->request->verb, session->request->raw_path);
     if (show_headers) {
-        U8* headers_stringified = Json.Stringify(session->request->headers, slon_mem_task);
+        U8* headers_stringified = Json.Stringify(session->request->headers, session->mem_task);
         AdamLog("[httpd] %d => headers: %s\n", session->s, headers_stringified);
         Free(headers_stringified);
         //@slon_free(session, headers_stringified);
@@ -337,7 +335,7 @@ U0 @slon_http_debug_print_response(SlonHttpSession* session, Bool show_headers =
     StrPrint(scratch_buffer, "%d", session->response->status_code);
     AdamLog("[httpd] %d <= response: %d %s\n", session->s, session->response->status_code, SLON_HTTP_STATUS_CODES->@(scratch_buffer));
     if (show_headers) {
-        U8* headers_stringified = Json.Stringify(session->response->headers, slon_mem_task);
+        U8* headers_stringified = Json.Stringify(session->response->headers, session->mem_task);
         AdamLog("[httpd] %d <= headers: %s\n", session->s, headers_stringified);
         Free(headers_stringified);
         //@slon_free(session, headers_stringified);
@@ -357,7 +355,7 @@ U0 @slon_http_json_object_add_nested_value(SlonHttpSession* session, JsonObject*
     if (StrOcc(name, '[') == 1 && String.EndsWith("[]", name)) {
         StrFind("[]", name)[0] = NULL;
         if (!obj->a(name)) {
-            obj->set(name, Json.CreateArray(slon_mem_task), JSON_ARRAY);
+            obj->set(name, Json.CreateArray(session->mem_task), JSON_ARRAY);
         }
         obj->a(name)->append(value, type);
         return;
@@ -378,7 +376,7 @@ U0 @slon_http_json_object_add_nested_value(SlonHttpSession* session, JsonObject*
         String.Trim(keys[i], ']', TRIM_RIGHT);
         if (!obj->o(keys[i])) {
             // Create the empty objects as we traverse
-            obj->set(keys[i], Json.CreateObject(slon_mem_task), JSON_OBJECT);
+            obj->set(keys[i], Json.CreateObject(session->mem_task), JSON_OBJECT);
         }
         obj = obj->o(keys[i]);
     }
@@ -387,7 +385,7 @@ U0 @slon_http_json_object_add_nested_value(SlonHttpSession* session, JsonObject*
     if (value_is_array_member) {
         if (!obj->a(keys[i])) {
             // Create the empty array if it does not exist
-            obj->set(keys[i], Json.CreateArray(slon_mem_task), JSON_ARRAY);
+            obj->set(keys[i], Json.CreateArray(session->mem_task), JSON_ARRAY);
         }
         // Append keys[i-1]: { keys[i]: [ ..., value ] }
         obj->a(keys[i])->append(value, type);
@@ -407,7 +405,7 @@ I64 @slon_http_free_and_null(U64 ptr)
 
 JsonObject* @slon_http_json_object_from_form_urlencoded_string(SlonHttpSession* session, U8* form_urlencoded_string)
 {
-    JsonObject* obj = Json.CreateObject(slon_mem_task);
+    JsonObject* obj = Json.CreateObject(session->mem_task);
 
     U8* form_urlencoded_string_copy = @slon_strnew(session, form_urlencoded_string);
     I64 raw_values_count = 0;
@@ -442,9 +440,9 @@ JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* ses
     U8 scratch_buffer[256];
 
     SlonMultipartParser* mp = @slon_calloc(session, sizeof(SlonMultipartParser));
-    mp->consumed = FifoU8New(2048, slon_mem_task);
+    mp->consumed = FifoU8New(2048, session->mem_task);
 
-    JsonObject* obj = Json.CreateObject(slon_mem_task);
+    JsonObject* obj = Json.CreateObject(session->mem_task);
     U8* boundary = StrFind("boundary=", session->header("content-type")) + 9;
     String.Trim(boundary);
     String.Trim(boundary, '"');
@@ -530,7 +528,7 @@ JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* ses
             switch (token) {
             case ';':
             case '\r':
-                name = @json_string_from_fifo(mp->consumed, slon_mem_task);
+                name = @json_string_from_fifo(mp->consumed, session->mem_task);
                 String.Trim(name);
                 String.Trim(name, '"');
                 mp->state = SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_TEXT_OR_FILE;
@@ -545,7 +543,7 @@ JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* ses
         case SLON_MULTIPART_CONSUME_CONTENT_DISPOSITION_TEXT_OR_FILE:
             switch (token) {
             case '\n':
-                tmp = @json_string_from_fifo(mp->consumed, slon_mem_task);
+                tmp = @json_string_from_fifo(mp->consumed, session->mem_task);
                 if (StrFind("filename=", tmp)) {
                     file = @slon_calloc(session, sizeof(SlonMultipartFile));
                     mp->state = SLON_MULTIPART_CONSUME_CONTENT_TYPE_HEADER;
@@ -575,7 +573,7 @@ JsonObject* @slon_http_json_object_from_multipart_form_data(SlonHttpSession* ses
             switch (token) {
             case ';':
             case '\r':
-                file->content_type = @json_string_from_fifo(mp->consumed, slon_mem_task);
+                file->content_type = @json_string_from_fifo(mp->consumed, session->mem_task);
                 String.Trim(file->content_type);
                 String.Trim(file->content_type, '"');
                 mp->state = SLON_MULTIPART_SKIP_REMAINING_HEADERS;
@@ -637,7 +635,7 @@ U0 @slon_http_parse_request_as_multipart_form_data(SlonHttpSession* session)
 
 U0 @slon_http_parse_request_as_json(SlonHttpSession* session)
 {
-    session->request->json = Json.Parse(session->request->data, slon_mem_task);
+    session->request->json = Json.Parse(session->request->data, session->mem_task);
 }
 
 U0 @slon_http_handle_delete_request(SlonHttpSession* session)
