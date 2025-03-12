@@ -9,19 +9,30 @@ JsonObject* db = Json.CreateObject(slon_db_mem_task);
 
 U0 @slon_db_load_accounts_from_disk()
 {
+    progress1 = 0;
+    progress1_max = 0;
     JsonArray* accounts = Json.CreateArray(slon_db_mem_task);
     U8 scratch_buffer[256];
     StrPrint(scratch_buffer, "%s/accounts/*.json", SLON_DB_PATH);
     CDirEntry* files = FilesFind(scratch_buffer);
     CDirEntry* de = files;
+    while (de) {
+        ++progress1_max;
+        de = de->next;
+    }
     JsonObject* account = NULL;
+    de = files;
     while (de) {
         account = Json.ParseFile(de->full_name, slon_db_mem_task);
         if (account) {
             accounts->append(account);
         }
+        ++progress1;
+        StrPrint(progress1_desc, "Loading profile for account [%d/%d]", progress1 + 1, progress1_max);
         de = de->next;
     }
+    progress1 = 0;
+    progress1_max = 0;
     DirTreeDel(files);
     db->set("accounts", accounts, JSON_ARRAY);
 }
@@ -130,11 +141,18 @@ U0 @slon_db_load_settings_from_disk()
 
 U0 @slon_db_load_statuses_from_disk()
 {
+    progress1 = 0;
+    progress1_max = 0;
     JsonObject* statuses = Json.CreateObject(slon_db_mem_task);
     U8 scratch_buffer[256];
     StrPrint(scratch_buffer, "%s/statuses/*.json", SLON_DB_PATH);
     CDirEntry* files = FilesFind(scratch_buffer);
     CDirEntry* de = files;
+    while (de) {
+        ++progress1_max;
+        de = de->next;
+    }
+    de = files;
     JsonArray* status_array = NULL;
     while (de) {
         status_array = Json.ParseFile(de->full_name, slon_db_mem_task);
@@ -142,8 +160,12 @@ U0 @slon_db_load_statuses_from_disk()
             StrFind(".json", de->name)[0] = NULL;
             statuses->set(de->name, status_array, JSON_ARRAY);
         }
+        ++progress1;
+        StrPrint(progress1_desc, "Loading statuses for account [%d/%d]", progress1 + 1, progress1_max);
         de = de->next;
     }
+    progress1 = 0;
+    progress1_max = 0;
     DirTreeDel(files);
     db->set("statuses", statuses, JSON_OBJECT);
 }
