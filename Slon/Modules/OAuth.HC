@@ -130,6 +130,9 @@ U0 @slon_oauth_verify_access_get(SlonHttpSession* session)
                 @slon_db_save_oauth_to_disk;
 
                 StrPrint(scratch_buffer, "%s?code=%s", redirect_uri, authorization_code);
+                if (request_json->@("client_state")) {
+                    String.Append(scratch_buffer, "&state=%s", request_json->@("client_state"));
+                }
                 JsonObject* redirect_uri_object = Json.CreateObject(slon_mem_task);
                 redirect_uri_object->set("redirect_uri", scratch_buffer, JSON_STRING);
                 session->send(redirect_uri_object);
