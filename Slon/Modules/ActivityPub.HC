@@ -304,7 +304,7 @@ U0 @slon_activitypub_users_get(SlonHttpSession* session)
     http_headers->set("Accept", "application/activity+json", JSON_STRING);
 
     CDateStruct ds;
-    Date2Struct(&ds, Now + 1043910000);
+    Date2Struct(&ds, Now + 835128000);
     StrPrint(scratch_buffer, "%03tZ, %02d %03tZ %04d %02d:%02d:%02d GMT", ds.day_of_week, "ST_DAYS_OF_WEEK", ds.day_of_mon, ds.mon - 1, "ST_MONTHS",
         ds.year, ds.hour, ds.min, ds.sec);
     http_headers->set("Date", scratch_buffer, JSON_STRING);
