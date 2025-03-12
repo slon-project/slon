@@ -290,8 +290,12 @@ U0 @slon_admin_info_stats(SlonHttpSession* session)
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn request_json;
 
+    I64 free_memory = sys_code_bp->alloced_u8s - sys_code_bp->used_u8s;
+    if (sys_data_bp) {
+        free_memory += sys_data_bp->alloced_u8s - sys_data_bp->used_u8s;
+    }
     StrPrint(scratch_buffer, "{");
-    String.Append(scratch_buffer, "\"uptime\":\"%d\"", cnts.jiffies);
+    String.Append(scratch_buffer, "\"uptime\":%d,\"free_memory\":%d", cnts.jiffies, free_memory);
     String.Append(scratch_buffer, "}");
 
     session->content_type("application/json");

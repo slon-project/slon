@@ -61,7 +61,7 @@
             const request = new Request("/info/stats");
             const response = await fetch(request);
             const stats = await response.json();
-            let html = "<h4 class=\"title is-4\">Statistics</h4><div class=spacer></div><div>Uptime: " + formatTime(stats["uptime"]) + "</div>";
+            let html = "<h4 class=\"title is-4\">Statistics</h4><div class=spacer></div><div>Uptime: " + formatTime(stats["uptime"]) + "<br/>Free memory: " + stats["free_memory"].toString() + " bytes<br/></div>";
             setContent(html);
             setActiveLink("stats");
         }
