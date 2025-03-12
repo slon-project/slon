@@ -87,6 +87,7 @@ class @json_callable_array : @json_array
     @json_callable_array* (*a)(I64 index, Bool return_item = FALSE);
     @json_callable_object* (*o)(I64 index, Bool return_item = FALSE);
     U0 (*append)(U64 value, I64 type = NULL);
+    Bool (*contains)(U64 value, I64 type = NULL, Bool match_case = FALSE);
     U0 (*insert)(I64 index, U64 value, I64 type = NULL);
     U0 (*prepend)(U64 value, I64 type = NULL);
     U0 (*remove)(I64 index);
@@ -1222,6 +1223,55 @@ U64 @json_array_index(@json_array* arr, I64 index, Bool return_item = FALSE)
         return item->value;
 }
 
+Bool @json_array_contains(@json_array* arr, U64 value, I64 type = NULL, Bool match_case = FALSE)
+{
+    if (!arr)
+        return FALSE;
+    if (arr->type != JSON_ARRAY)
+        return FALSE;
+    if (!arr->length)
+        return FALSE;
+
+    if (!type) {
+        if (value > 0x1000) {
+            type = JSON_STRING;
+        } else {
+            type = JSON_BOOLEAN;
+        }
+    }
+
+    I64 i;
+    @json_item* item = NULL;
+    for (i = 0; i < arr->length; i++) {
+        item = @json_array_index(arr, i, TRUE);
+        if (item->type == type) {
+            switch (type) {
+            case JSON_STRING:
+                if (match_case) {
+                    if (!StrCmp(value, item->value)) {
+                        return TRUE;
+                    }
+                } else {
+                    if (!StrICmp(value, item->value)) {
+                        return TRUE;
+                    }
+                }
+                break;
+            case JSON_BOOLEAN:
+            case JSON_NULL:
+            case JSON_NUMBER:
+                if (item->value == value) {
+                    return TRUE;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    return FALSE;
+}
+
 U0 @json_remove_item(@json_array* arr, I64 index)
 {
     if (!arr)
@@ -1266,6 +1316,11 @@ U64 @json_callable_array_index_wrapper_function(I64 index, Bool return_item = FA
 U0 @json_callable_array_append_wrapper_function(U64 value, I64 type = NULL)
 {
     @json_append_item(JSON_WRAPPER_MAGIC_NUMBER, value, type);
+}
+
+Bool @json_callable_array_contains_wrapper_function(U64 value, I64 type = NULL, Bool match_case = FALSE)
+{
+    return @json_array_contains(JSON_WRAPPER_MAGIC_NUMBER, value, type, match_case);
 }
 
 U0 @json_callable_array_insert_wrapper_function(I64 index, U64 value, I64 type = NULL)
@@ -1318,6 +1373,19 @@ U0 @json_callable_array_remove_wrapper_function(I64 index)
     a = carr->append;
     a += 0x1b;
     @patch_call_rel32(a, &@json_append_item);
+
+    // Create a copy of function and patch Contains
+    code_size = MSize(&@json_callable_array_contains_wrapper_function);
+    carr->contains = CAlloc(code_size, arr->mem_task->code_heap);
+    MemCpy(carr->contains, &@json_callable_array_contains_wrapper_function, code_size);
+
+    a = carr->contains;
+    a += 0x1b;
+    MemSetI64(a, carr, 1);
+
+    a = carr->contains;
+    a += 0x24;
+    @patch_call_rel32(a, &@json_array_contains);
 
     // Create a copy of function and patch Prepend
     code_size = MSize(&@json_callable_array_prepend_wrapper_function);
