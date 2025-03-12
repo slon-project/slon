@@ -35,6 +35,7 @@
         <p class="menu-label">Manage</p>
         <ul class="menu-list">
             <li><a onclick="manageAccounts(0)" id="menuitem-accounts">Accounts</a></li>
+            <li><a onclick="manageAnnouncements()" id="menuitem-announcements">Announcements</a></li>
             <li><a onclick="manageInstance()" id="menuitem-instance">Instance</a></li>
             <li><a onclick="manageSettings()" id="menuitem-settings">Settings</a></li>
         </ul>
@@ -94,6 +95,25 @@
             html += "<br><br><input onclick=manageNewUser() class=button type=button value=\"New User\">";
             setContent(html);
             setActiveLink("accounts");
+        }
+        async function manageAnnouncements() {
+            clearActiveLinks();
+            const request = new Request("/manage/announcements");
+            const response = await fetch(request);
+            const announcements = await response.json();
+            let html = "<h4 class=\"title is-4\">Announcements</h4><div class=spacer></div><div>";
+            if (announcements.length) {
+                html += announcements.length + " announcement(s)</div><div class=spacer></div>";
+                html += "<table class=table><thead><tr><th>id</th><th>published_at</th><th>updated_at</th><th>content</th><th>delete</th></tr></head><tbody>";
+                for (let i = 0; i < announcements.length; i++) {
+                    html += "<tr><td>" + announcements[i]["id"] + "</td><td>" + announcements[i]["published_at"] + "</td><td>" + announcements[i]["updated_at"] + "</td><td>" + announcements[i]["content"] + "</td><td style=\"text-align:center\"><a href=\"javascript:confirmDeleteAnnouncement('" + announcements[i]["id"] + "');\">&#10060;</a></td><tr>";
+                }
+            } else {
+                html += "No announcements</div><div class=spacer></div>";
+            }
+            html += "<br><br><input onclick=createNewAnnouncement() class=button type=button value=\"New Announcement\">";
+            setContent(html);
+            setActiveLink("announcements");
         }
         async function manageInstance() {
             clearActiveLinks();
@@ -182,6 +202,14 @@
             const response = await fetch(request);
             manageSettings();
         }
+        async function confirmDeleteAnnouncement(id) {
+            if (confirm("Are you sure you want to delete announcement id " + id + " ?")) {
+                const request = new Request("/delete/announcement?id=" + id);
+                const response = await fetch(request);
+                const empty_json = await response.json();
+                manageAnnouncements();
+            }
+        }
         async function confirmDeleteUser(user, id) {
             if (confirm("Are you sure you want to delete '" + user + "' ?")) {
                 const request = new Request("/delete/account?id=" + id);
@@ -190,6 +218,23 @@
                 manageAccounts(0);
             }
         }
+        function createNewAnnouncement() {
+            clearActiveLinks();
+            let html = "<h4 class=\"title is-4\">New Announcement</h4><div class=spacer></div>";
+
+            html += "<form action=\"javascript:saveNewAnnouncement()\"><div>";
+
+            html += "<div class=\"section is-inline-block\" style=\"width:420px;vertical-align:top\">";
+            html += "<textarea class=\"textarea\" placeholder=\"content goes here\" id=\"announcement-content\"></textarea>";
+            html += "</div>";
+
+            html += "</div>";
+            html += "<div class=\"control next\"><input class=\"button is-link\" type=submit value=Save></div>"
+            html += "</div></form>";
+
+            setContent(html);
+            setActiveLink("announcements");
+        }        
         function manageNewUser() {
             clearActiveLinks();
             let html = "<h4 class=\"title is-4\">New User</h4><div class=spacer></div>";
@@ -215,6 +260,21 @@
 
             setContent(html);
             setActiveLink("accounts");
+        }
+        async function saveNewAnnouncement() {
+            let data = {"content": document.getElementById("announcement-content").value};
+            const request = new Request("/new/announcement", {
+                headers: { "Content-Type": "application/json" },
+                method: "POST",
+                body: JSON.stringify(data)
+            });
+            const response = await fetch(request);
+            const json = await response.json();
+            if (!Object.keys(json).length) {
+                manageAnnouncements();
+            } else {
+                alert(JSON.stringify(json));
+            }
         }
         async function saveNewUser() {
             let data = {};

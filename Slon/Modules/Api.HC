@@ -133,6 +133,20 @@ JsonObject* @slon_api_account_by_remote_actor(U8* remote_actor)
     return NULL;
 }
 
+JsonObject* @slon_api_announcement_by_id(U8* id)
+{
+    if (!id || !StrLen(id))
+        return NULL;
+    JsonArray* announcements = db->a("announcements");
+    I64 i;
+    for (i = 0; i < announcements->length; i++) {
+        if (!StrICmp(announcements->o(i)->@("id"), id)) {
+            return announcements->o(i);
+        }
+    }
+    return NULL;
+}
+
 U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
 {
     if (!cb) {

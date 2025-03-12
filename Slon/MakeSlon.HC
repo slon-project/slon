@@ -9,6 +9,7 @@ WinMax(Fs);
 #include "Modules/Api";
 
 #include "Api/V1/Accounts";
+#include "Api/V1/Announcements";
 #include "Api/V1/Apps";
 #include "Api/V1/Blocks";
 #include "Api/V1/Bookmarks";

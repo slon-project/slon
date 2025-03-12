@@ -248,6 +248,28 @@ U0 @slon_admin_delete_account(SlonHttpSession* session)
     session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
+U0 @slon_admin_delete_announcement(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    if (!request_json->@("id"))
+        return;
+    I64 i;
+    JsonArray* announcements = db->a("announcements");
+    JsonObject* announcement = NULL;
+    for (i = 0; i < announcements->length; i++) {
+        announcement = announcements->o(i);
+        if (announcement && !StrICmp(request_json->@("id"), announcement->@("id"))) {
+            AdamLog("deleting announcement %d\n", i);
+            announcements->remove(i);
+            break;
+        }
+    }
+    @slon_db_save_announcements_to_disk;
+    session->send(SLON_EMPTY_JSON_OBJECT);
+}
+
 U0 @slon_admin_new_account(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -260,6 +282,38 @@ U0 @slon_admin_new_account(SlonHttpSession* session)
         @slon_admin_create_account(session);
         session->send(SLON_EMPTY_JSON_OBJECT);
     }
+}
+
+U0 @slon_admin_new_announcement(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+
+    if (request_json->@("content")) {
+        U8* id = @slon_api_generate_unique_id(session);
+        U8* timestamp = @slon_api_timestamp_from_cdate(session, Now);
+        JsonObject* announcement = Json.CreateObject(slon_db_mem_task);
+        announcement->set("id", id, JSON_STRING);
+        announcement->set("content", request_json->@("content"), JSON_STRING);
+        announcement->set("starts_at", NULL, JSON_NULL);
+        announcement->set("ends_at", NULL, JSON_NULL);
+        announcement->set("all_day", FALSE, JSON_BOOLEAN);
+        announcement->set("published_at", timestamp, JSON_STRING);
+        announcement->set("updated_at", timestamp, JSON_STRING);
+        announcement->set("read", FALSE, JSON_BOOLEAN);
+        announcement->set("read_users", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
+        announcement->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        announcement->set("statuses", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+        announcement->set("tags", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
+        announcement->set("emojis", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
+        // Internally, "reactions" is { "emoji": [ "account_id", "account_id", ... ]}
+        // This is presented to the client as: "reactions": [ { "name": "emoji", "count": xxx, "me": true/false }, ... ]
+        announcement->set("reactions", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+        db->a("announcements")->append(announcement);
+        @slon_db_save_announcements_to_disk;
+        @slon_free(session, id);
+        @slon_free(session, timestamp);
+    }
+    session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
 U0 @slon_admin_manage_accounts(SlonHttpSession* session)
@@ -324,14 +378,26 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
         return;
     }
 
+    if (!StrICmp("/delete/announcement", session->path())) {
+        @slon_admin_delete_announcement(session);
+        return;
+    }
+
     if (!StrICmp("/manage/accounts", session->path())) {
         @slon_admin_manage_accounts(session);
         return;
     }
+
+    if (!StrICmp("/manage/announcements", session->path())) {
+        session->send(db->a("announcements"));
+        return;
+    }
+
     if (!StrICmp("/manage/instance", session->path())) {
         session->send(db->o("instance"));
         return;
     }
+
     if (!StrICmp("/manage/settings", session->path())) {
         session->send(db->o("settings"));
         return;
@@ -392,6 +458,11 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
 
     if (!StrICmp("/new/account", session->path())) {
         @slon_admin_new_account(session);
+        return;
+    }
+
+    if (!StrICmp("/new/announcement", session->path())) {
+        @slon_admin_new_announcement(session);
         return;
     }
 

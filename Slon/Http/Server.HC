@@ -645,6 +645,7 @@ U0 @slon_http_handle_delete_request(SlonHttpSession* session)
 
     /* clang-format off */
 
+    #include "Endpoints/Delete/Announcements";
     #include "Endpoints/Delete/Statuses";
 
     /* clang-format on */
@@ -664,6 +665,7 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
     /* clang-format off */
 
     #include "Endpoints/Get/Accounts";
+    #include "Endpoints/Get/Announcements";
     #include "Endpoints/Get/ActivityPub";
     #include "Endpoints/Get/Blocks";
     #include "Endpoints/Get/Bookmarks";
@@ -735,6 +737,7 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
     /* clang-format off */
 
     #include "Endpoints/Post/Accounts";
+    #include "Endpoints/Post/Announcements";
     #include "Endpoints/Post/ActivityPub";
     #include "Endpoints/Post/Apps";
     #include "Endpoints/Post/Markers";
@@ -763,6 +766,7 @@ U0 @slon_http_handle_put_request(SlonHttpSession* session)
 
     /* clang-format off */
 
+    #include "Endpoints/Put/Announcements";
     #include "Endpoints/Put/Media";
 
     /* clang-format on */
