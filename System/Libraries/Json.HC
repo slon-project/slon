@@ -1254,6 +1254,8 @@ U0 @json_remove_item(@json_array* arr, I64 index)
     if (next_item)
         next_item->prev = prev_item;
     @json_remove_item_final : --arr->length;
+    if (!arr->length)
+        arr->last_item = NULL;
 }
 
 U64 @json_callable_array_index_wrapper_function(I64 index, Bool return_item = FALSE)
