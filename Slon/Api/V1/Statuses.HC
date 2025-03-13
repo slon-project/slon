@@ -60,8 +60,9 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
     JsonObject* status = NULL;
     if (status_array && status_array->length) {
         for (i = status_array->length - 1; i > -1; i--) {
-            status = status_array->o(i);
+            status = Json.Clone(status_array->o(i), session->mem_task);
             status_id = Str2I64(status->@("id"));
+            status->set("favourited", @slon_api_status_is_favourited(session, status, account_id), JSON_BOOLEAN);
             exclude_status = FALSE;
             if (status->@("deleted")) {
                 exclude_status = TRUE;
@@ -171,6 +172,7 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
     JsonObject* status = NULL;
 
     if (@slon_api_authorized(session)) {
+        SLON_AUTH_ACCOUNT_ID
 
         if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
             JsonObject* context = Json.CreateObject(slon_mem_task);
@@ -196,6 +198,8 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
 
         status = @slon_api_find_status_by_id(id, NULL);
         if (status) {
+            status = Json.Clone(status, session->mem_task);
+            status->set("favourited", @slon_api_status_is_favourited(session, status, account_id), JSON_BOOLEAN);
             session->send(status);
             return;
         }
@@ -218,11 +222,35 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         SLON_AUTH_ACCOUNT_ID
 
         U8* id = NULL;
+        JsonObject* status = NULL;
 
         if (session->path_count() > 4) {
-            // FIXME: Do stuff
-            AdamLog("session->path_count is : %d\n", session->path_count());
-            session->status(404);
+            id = session->path(3);
+            U8* verb = session->path(4);
+
+            status = @slon_api_find_status_by_id(id, NULL);
+            if (!status) {
+                session->status(404);
+                return;
+            }
+
+            if (!StrICmp("favourite", verb)) {
+                status = Json.Clone(status, session->mem_task);
+                @slon_api_favourite_status(session, status, account_id);
+                status->set("favourited", TRUE, JSON_BOOLEAN);
+                session->send(status);
+                return;
+            }
+
+            if (!StrICmp("unfavourite", verb)) {
+                status = Json.Clone(status, session->mem_task);
+                @slon_api_unfavourite_status(session, status, account_id);
+                status->set("favourited", FALSE, JSON_BOOLEAN);
+                session->send(status);
+                return;
+            }
+
+            session->status(400);
             return;
         }
 
@@ -270,7 +298,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
         // Mastodon iOS app lets us post with +:    reblogs_count, favourites_count, emojis, tags, mentions
         // IceCubesApp lets us post with +:         media_attachments, replies_count, spoiler_text, sensitive
 
-        JsonObject* status = Json.CreateObject(slon_mem_task);
+        status = Json.CreateObject(slon_mem_task);
         JsonObject* reply_to_status = NULL;
         JsonArray* media_attachments = NULL;
         String.Trim(request_json->@("status"));

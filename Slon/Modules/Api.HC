@@ -147,6 +147,70 @@ JsonObject* @slon_api_announcement_by_id(U8* id)
     return NULL;
 }
 
+Bool @slon_api_status_is_favourited(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* favourites = db->o("favourites")->a(account_id);
+    JsonObject* favourite = NULL;
+    if (!favourites) {
+        return FALSE;
+    }
+    I64 i;
+    for (i = 0; i < favourites->length; i++) {
+        favourite = favourites->o(i);
+        if (!StrICmp(favourite->@("status_id"), status->@("id")) && !StrICmp(favourite->@("account_id"), status->o("account")->@("id"))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+U0 @slon_api_favourite_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    Bool is_already_favourited = FALSE;
+    JsonArray* favourites = db->o("favourites")->a(account_id);
+    JsonObject* favourite = NULL;
+    if (!favourites) {
+        favourites = Json.CreateArray(slon_db_mem_task);
+        db->o("favourites")->set(account_id, favourites, JSON_ARRAY);
+    }
+    I64 i;
+    for (i = 0; i < favourites->length; i++) {
+        favourite = favourites->o(i);
+        if (!StrICmp(favourite->@("status_id"), status->@("id")) && !StrICmp(favourite->@("account_id"), status->o("account")->@("id"))) {
+            is_already_favourited = TRUE;
+            break;
+        }
+    }
+    if (!is_already_favourited) {
+        favourite = Json.CreateObject(session->mem_task);
+        favourite->set("status_id", status->@("id"), JSON_STRING);
+        favourite->set("account_id", status->o("account")->@("id"), JSON_STRING);
+        favourites->append(favourite);
+        @slon_db_save_favourites_to_disk;
+    }
+}
+
+U0 @slon_api_unfavourite_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* favourites = db->o("favourites")->a(account_id);
+    JsonObject* favourite = NULL;
+    if (!favourites) {
+        favourites = Json.CreateArray(slon_db_mem_task);
+        db->o("favourites")->set(account_id, favourites, JSON_ARRAY);
+    }
+    I64 i;
+    for (i = 0; i < favourites->length; i++) {
+        favourite = favourites->o(i);
+        if (!StrICmp(favourite->@("status_id"), status->@("id")) && !StrICmp(favourite->@("account_id"), status->o("account")->@("id"))) {
+            favourites->remove(i);
+            @slon_db_save_favourites_to_disk;
+            break;
+        }
+    }
+}
+
 U0 @slon_api_async_upload_to_catbox(SlonCatboxUpload* cb)
 {
     if (!cb) {

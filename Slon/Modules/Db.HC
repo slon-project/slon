@@ -79,6 +79,26 @@ U0 @slon_db_load_private_keys_from_disk()
     db->set("private_keys", Json.ParseFile(scratch_buffer, slon_db_mem_task), JSON_OBJECT);
 }
 
+U0 @slon_db_load_favourites_from_disk()
+{
+    JsonObject* favourites = Json.CreateObject(slon_db_mem_task);
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/favourites/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonArray* favourite_array = NULL;
+    while (de) {
+        favourite_array = Json.ParseFile(de->full_name, slon_db_mem_task);
+        if (favourite_array) {
+            StrFind(".json", de->name)[0] = NULL;
+            favourites->set(de->name, favourite_array, JSON_ARRAY);
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("favourites", favourites, JSON_OBJECT);
+}
+
 U0 @slon_db_load_followers_from_disk()
 {
     JsonObject* followers = Json.CreateObject(slon_db_mem_task);
@@ -265,6 +285,17 @@ U0 @slon_db_save_private_keys_to_disk()
     Json.DumpToFile(scratch_buffer, db->o("private_keys"), slon_db_mem_task);
 }
 
+U0 @slon_db_save_favourites_to_disk()
+{
+    U8 scratch_buffer[256];
+    JsonKey* key = db->o("favourites")->keys;
+    while (key) {
+        StrPrint(scratch_buffer, "%s/favourites/%s.json", SLON_DB_PATH, key->name);
+        Json.DumpToFile(scratch_buffer, key->value, slon_db_mem_task);
+        key = key->next;
+    }
+}
+
 U0 @slon_db_save_followers_to_disk()
 {
     U8 scratch_buffer[256];
@@ -344,6 +375,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_actors_to_disk();
     @slon_db_save_announcements_to_disk();
     @slon_db_save_apps_to_disk();
+    @slon_db_save_favourites_to_disk();
     @slon_db_save_followers_to_disk();
     @slon_db_save_following_to_disk();
     @slon_db_save_instance_to_disk();
@@ -365,6 +397,7 @@ U0 @slon_db_load_from_defaults()
     db->set("private_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("private_keys_binary", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("public_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    db->set("favourites", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("followers", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("following", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("instance", Json.ParseFile("M:/Slon/Static/defaults/instance.json", slon_db_mem_task), JSON_OBJECT);
@@ -394,6 +427,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_private_keys_from_disk();
     db->set("private_keys_binary", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("public_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    @slon_db_load_favourites_from_disk();
     @slon_db_load_followers_from_disk();
     @slon_db_load_following_from_disk();
     @slon_db_load_instance_from_disk();
