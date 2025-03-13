@@ -36,6 +36,7 @@
         <ul class="menu-list">
             <li><a onclick="manageAccounts(0)" id="menuitem-accounts">Accounts</a></li>
             <li><a onclick="manageAnnouncements()" id="menuitem-announcements">Announcements</a></li>
+            <li><a onclick="manageCustomEmojis()" id="menuitem-customemojis">Custom Emoji</a></li>
             <li><a onclick="manageInstance()" id="menuitem-instance">Instance</a></li>
             <li><a onclick="manageSettings()" id="menuitem-settings">Settings</a></li>
         </ul>
@@ -115,6 +116,34 @@
             setContent(html);
             setActiveLink("announcements");
         }
+        async function manageCustomEmojis() {
+            clearActiveLinks();
+            const request = new Request("/manage/custom-emojis");
+            const response = await fetch(request);
+            const custom_emojis = await response.json();
+            let html = "<h4 class=\"title is-4\">Custom Emojis</h4><div class=spacer></div>";
+
+            for (let i = 0; i < custom_emojis.length; i++) {
+                let filename_split = custom_emojis[i]["url"].split('/')
+                html += "<div class=\"is-inline-block\"><img src=\"" + custom_emojis[i]["url"] + "\" style=\"width:48px;height:48px\"><br>" + custom_emojis[i]["shortcode"] + "<br><button onclick=\"confirmDeleteCustomEmoji('" + custom_emojis[i]["shortcode"] + "', '" + filename_split[filename_split.length-1] + "')\">Delete</button></div>";
+            }
+
+            html += "<form id=\"emoji-form\"action=\"javascript:saveNewCustomEmoji()\"><div>";
+
+            html += "<div class=\"section is-inline-block\" style=\"width:420px;vertical-align:top\">";
+            html += "<label class=label>Shortcode</label><div class=control><input name=shortcode id=shortcode class=input placeholder=my-cool-emoji required autocomplete=off></div><div class=spacer></div>";
+            html += "<label class=label>Image</label><div class=control><input onchange=updateBase64Image(this) name=image-file id=image-file type=file required autocomplete=off> <img id=image-thumb style=\"display:none\" width=48 height=48></div><div class=spacer></div>";
+            html += "<label class=label>Visible in picker</label><div class=control><input name=visible-in-picker id=visible-in-picker type=checkbox checked></div><div class=spacer></div>";
+            html += "<label class=label>Category</label><div class=control><input name=category id=category class=input placeholder=\"Cool Emojis\" required autocomplete=off></div><div class=spacer></div>";
+            html += "</div>";
+
+            html += "</div>";
+            html += "<div class=\"control next\"><input class=\"button is-link\" type=submit value=New Custom Emoji></div>"
+            html += "</div></form>";
+
+            setContent(html);
+            setActiveLink("customemojis");
+        }        
         async function manageInstance() {
             clearActiveLinks();
             const request = new Request("/manage/instance");
@@ -218,6 +247,14 @@
                 manageAccounts(0);
             }
         }
+        async function confirmDeleteCustomEmoji(shortcode, filename) {
+            if (confirm("Are you sure you want to delete :" + shortcode + ": ?")) {
+                const request = new Request("/delete/custom-emoji?shortcode=" + shortcode + "&filename=" + filename);
+                const response = await fetch(request);
+                const empty_json = await response.json();
+                manageCustomEmojis();
+            }
+        }
         function createNewAnnouncement() {
             clearActiveLinks();
             let html = "<h4 class=\"title is-4\">New Announcement</h4><div class=spacer></div>";
@@ -307,6 +344,17 @@
                 alert(JSON.stringify(json));
             }
         }
+        async function saveNewCustomEmoji() {
+            const form = document.getElementById('emoji-form');
+            const formData = new FormData(form);
+            const response = await fetch('/new/custom-emoji', { method: 'POST', body: formData, signal: AbortSignal.timeout(15000) });
+            const json = await response.json();
+            if (!Object.keys(json).length) {
+                manageCustomEmojis();
+            } else {
+                alert(JSON.stringify(json));
+            }
+        }
         async function saveInstance() {
             let data = {};
             let fields = document.getElementsByTagName("input");
@@ -336,6 +384,18 @@
                 "load",
                 () => {
                     el.base64 = reader.result.split(";base64,")[1];
+                }
+            );
+        }
+        function updateBase64Image(el) {
+            let reader = new FileReader();
+            reader.readAsDataURL(el.files[0]);
+            reader.addEventListener(
+                "load",
+                () => {
+                    el.base64 = reader.result;
+                    document.getElementById("image-thumb").src = reader.result;
+                    document.getElementById("image-thumb").style = "";
                 }
             );
         }

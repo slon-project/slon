@@ -270,6 +270,30 @@ U0 @slon_admin_delete_announcement(SlonHttpSession* session)
     session->send(SLON_EMPTY_JSON_OBJECT);
 }
 
+U0 @slon_admin_delete_custom_emoji(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    U8* shortcode = request_json->@("shortcode");
+    U8* filename = request_json->@("filename");
+    JsonArray* custom_emojis = db->a("custom_emojis");
+    JsonObject* emoji = NULL;
+    I64 i;
+    if (shortcode && filename) {
+        @slon_api_async_delete_from_catbox(filename);
+        for (i = 0; i < custom_emojis->length; i++) {
+            emoji = custom_emojis->o(i);
+            if (!StrICmp(shortcode, emoji->@("shortcode"))) {
+                custom_emojis->remove(i);
+                break;
+            }
+        }
+        @slon_db_save_custom_emojis_to_disk;
+    }
+    session->send(SLON_EMPTY_JSON_OBJECT);
+}
+
 U0 @slon_admin_new_account(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -313,6 +337,60 @@ U0 @slon_admin_new_announcement(SlonHttpSession* session)
         @slon_free(session, timestamp);
     }
     session->send(SLON_EMPTY_JSON_OBJECT);
+}
+
+U0 @slon_admin_new_custom_emoji(SlonHttpSession* session)
+{
+    SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
+
+    SlonMultipartFile* file = request_json->@("image-file");
+    if (!file || !file->buffer || !file->size || !file->content_type) {
+        session->send(Json.Parse("{\"error\":\"image file not present or corrupt/invalid type\"}", session->mem_task));
+        return;
+    }
+
+    JsonObject* emoji = Json.CreateObject(slon_db_mem_task);
+    emoji->set("shortcode", request_json->@("shortcode"), JSON_STRING);
+    emoji->set("visible_in_picker", request_json->@("visible-in-picker"), JSON_BOOLEAN);
+
+    U8* category = request_json->@("category");
+    if (category && StrLen(category)) {
+        emoji->set("category", category, JSON_STRING);
+    }
+
+    U8* image_id = @slon_api_generate_unique_id(session);
+    U8* ext = StrFind("image/", file->content_type) + 6;
+
+    StrPrint(scratch_buffer, "%s/%s.%s", SLON_MEDIA_PATH, image_id, ext);
+    FileWrite(scratch_buffer, file->buffer, file->size);
+
+    JsonKey* key = @slon_calloc(session, sizeof(JsonKey));
+
+    SlonCatboxUpload* cb = CAlloc(sizeof(SlonCatboxUpload), slon_mem_task);
+    cb->key = key;
+    cb->filepath = StrNew(scratch_buffer, slon_mem_task);
+
+    session->send(SLON_EMPTY_JSON_OBJECT);
+
+    // NOTE: This is synchronous, despite the function name
+    @slon_api_async_upload_to_catbox(cb);
+    Del(scratch_buffer);
+
+    if (key->value) {
+        AdamLog("cb->key->value: %s\n", key->value);
+        emoji->set("url", key->value, JSON_STRING);
+        emoji->set("static_url", key->value, JSON_STRING);
+        db->a("custom_emojis")->append(emoji);
+        @slon_db_save_custom_emojis_to_disk;
+        session->send(SLON_EMPTY_JSON_OBJECT);
+    } else {
+        session->send(Json.Parse("{\"error\":\"upload to catbox failed\"}", session->mem_task));
+    }
+
+    @slon_free(session, image_id);
+    Free(key->value);
+    @slon_free(session, key);
 }
 
 U0 @slon_admin_manage_accounts(SlonHttpSession* session)
@@ -382,6 +460,11 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
         return;
     }
 
+    if (!StrICmp("/delete/custom-emoji", session->path())) {
+        @slon_admin_delete_custom_emoji(session);
+        return;
+    }
+
     if (!StrICmp("/manage/accounts", session->path())) {
         @slon_admin_manage_accounts(session);
         return;
@@ -389,6 +472,11 @@ U0 @slon_admin_server_get(SlonHttpSession* session)
 
     if (!StrICmp("/manage/announcements", session->path())) {
         session->send(db->a("announcements"));
+        return;
+    }
+
+    if (!StrICmp("/manage/custom-emojis", session->path())) {
+        session->send(db->a("custom_emojis"));
         return;
     }
 
@@ -445,6 +533,10 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
         @slon_http_parse_request_as_json(session);
     }
 
+    if (String.BeginsWith("multipart/form-data", session->header("content-type"))) {
+        @slon_http_parse_request_as_multipart_form_data(session);
+    }
+
     if (!StrICmp("/setup/instance", session->path()) || !StrICmp("/save/instance", session->path())) {
         @slon_admin_setup_instance(session);
         return;
@@ -462,6 +554,11 @@ U0 @slon_admin_server_post(SlonHttpSession* session)
 
     if (!StrICmp("/new/announcement", session->path())) {
         @slon_admin_new_announcement(session);
+        return;
+    }
+
+    if (!StrICmp("/new/custom-emoji", session->path())) {
+        @slon_admin_new_custom_emoji(session);
         return;
     }
 

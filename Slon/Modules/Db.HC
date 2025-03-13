@@ -58,6 +58,13 @@ U0 @slon_db_load_announcements_from_disk()
     db->set("announcements", Json.ParseFile(scratch_buffer, slon_db_mem_task), JSON_ARRAY);
 }
 
+U0 @slon_db_load_custom_emojis_from_disk()
+{
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/custom_emojis.json", SLON_DB_PATH);
+    db->set("custom_emojis", Json.ParseFile(scratch_buffer, slon_db_mem_task), JSON_ARRAY);
+}
+
 U0 @slon_db_load_instance_from_disk()
 {
     U8 scratch_buffer[256];
@@ -264,6 +271,13 @@ U0 @slon_db_save_announcements_to_disk()
     Json.DumpToFile(scratch_buffer, db->a("announcements"), slon_db_mem_task);
 }
 
+U0 @slon_db_save_custom_emojis_to_disk()
+{
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/custom_emojis.json", SLON_DB_PATH);
+    Json.DumpToFile(scratch_buffer, db->a("custom_emojis"), slon_db_mem_task);
+}
+
 U0 @slon_db_save_instance_to_disk()
 {
     U8 scratch_buffer[256];
@@ -375,6 +389,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_actors_to_disk();
     @slon_db_save_announcements_to_disk();
     @slon_db_save_apps_to_disk();
+    @slon_db_save_custom_emojis_to_disk();
     @slon_db_save_favourites_to_disk();
     @slon_db_save_followers_to_disk();
     @slon_db_save_following_to_disk();
@@ -393,6 +408,7 @@ U0 @slon_db_load_from_defaults()
     db->set("actors", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("announcements", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
     db->set("apps", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    db->set("custom_emojis", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
     db->set("idempotency_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("private_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("private_keys_binary", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
@@ -423,6 +439,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_actors_from_disk();
     @slon_db_load_announcements_from_disk();
     @slon_db_load_apps_from_disk();
+    @slon_db_load_custom_emojis_from_disk();
     db->set("idempotency_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     @slon_db_load_private_keys_from_disk();
     db->set("private_keys_binary", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
