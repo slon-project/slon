@@ -287,6 +287,7 @@ U0 @slon_admin_new_account(SlonHttpSession* session)
 U0 @slon_admin_new_announcement(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
+    no_warn scratch_buffer;
 
     if (request_json->@("content")) {
         U8* id = @slon_api_generate_unique_id(session);
@@ -305,8 +306,6 @@ U0 @slon_admin_new_announcement(SlonHttpSession* session)
         announcement->set("statuses", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
         announcement->set("tags", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
         announcement->set("emojis", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
-        // Internally, "reactions" is { "emoji": [ "account_id", "account_id", ... ]}
-        // This is presented to the client as: "reactions": [ { "name": "emoji", "count": xxx, "me": true/false }, ... ]
         announcement->set("reactions", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
         db->a("announcements")->append(announcement);
         @slon_db_save_announcements_to_disk;

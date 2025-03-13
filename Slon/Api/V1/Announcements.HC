@@ -25,7 +25,6 @@ U0 @slon_api_v1_announcements_delete(SlonHttpSession* session)
 
         if (!StrICmp("reactions", verb)) {
             JsonArray* emoji_array = announcement->o("reactions")->a(emoji);
-            Bool save_announcements = FALSE;
             if (emoji_array && emoji_array->contains(account_id)) {
                 for (i = 0; i < emoji_array->length; i++) {
                     if (!StrICmp(account_id, emoji_array->@(i))) {
