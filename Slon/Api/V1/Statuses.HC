@@ -234,6 +234,22 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
                 return;
             }
 
+            if (!StrICmp("bookmark", verb)) {
+                status = Json.Clone(status, session->mem_task);
+                @slon_api_bookmark_status(session, status, account_id);
+                status->set("bookmarked", TRUE, JSON_BOOLEAN);
+                session->send(status);
+                return;
+            }
+
+            if (!StrICmp("unbookmark", verb)) {
+                status = Json.Clone(status, session->mem_task);
+                @slon_api_unbookmark_status(session, status, account_id);
+                status->set("bookmarked", FALSE, JSON_BOOLEAN);
+                session->send(status);
+                return;
+            }
+
             if (!StrICmp("favourite", verb)) {
                 status = Json.Clone(status, session->mem_task);
                 @slon_api_favourite_status(session, status, account_id);

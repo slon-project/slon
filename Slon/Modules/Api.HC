@@ -147,6 +147,70 @@ JsonObject* @slon_api_announcement_by_id(U8* id)
     return NULL;
 }
 
+Bool @slon_api_status_is_bookmarked(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* bookmarks = db->o("bookmarks")->a(account_id);
+    JsonObject* bookmark = NULL;
+    if (!bookmarks) {
+        return FALSE;
+    }
+    I64 i;
+    for (i = 0; i < bookmarks->length; i++) {
+        bookmark = bookmarks->o(i);
+        if (!StrICmp(bookmark->@("status_id"), status->@("id")) && !StrICmp(bookmark->@("account_id"), status->o("account")->@("id"))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+U0 @slon_api_bookmark_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    Bool is_already_bookmarked = FALSE;
+    JsonArray* bookmarks = db->o("bookmarks")->a(account_id);
+    JsonObject* bookmark = NULL;
+    if (!bookmarks) {
+        bookmarks = Json.CreateArray(slon_db_mem_task);
+        db->o("bookmarks")->set(account_id, bookmarks, JSON_ARRAY);
+    }
+    I64 i;
+    for (i = 0; i < bookmarks->length; i++) {
+        bookmark = bookmarks->o(i);
+        if (!StrICmp(bookmark->@("status_id"), status->@("id")) && !StrICmp(bookmark->@("account_id"), status->o("account")->@("id"))) {
+            is_already_bookmarked = TRUE;
+            break;
+        }
+    }
+    if (!is_already_bookmarked) {
+        bookmark = Json.CreateObject(session->mem_task);
+        bookmark->set("status_id", status->@("id"), JSON_STRING);
+        bookmark->set("account_id", status->o("account")->@("id"), JSON_STRING);
+        bookmarks->append(bookmark);
+        @slon_db_save_bookmarks_to_disk;
+    }
+}
+
+U0 @slon_api_unbookmark_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* bookmarks = db->o("bookmarks")->a(account_id);
+    JsonObject* bookmark = NULL;
+    if (!bookmarks) {
+        bookmarks = Json.CreateArray(slon_db_mem_task);
+        db->o("bookmarks")->set(account_id, bookmarks, JSON_ARRAY);
+    }
+    I64 i;
+    for (i = 0; i < bookmarks->length; i++) {
+        bookmark = bookmarks->o(i);
+        if (!StrICmp(bookmark->@("status_id"), status->@("id")) && !StrICmp(bookmark->@("account_id"), status->o("account")->@("id"))) {
+            bookmarks->remove(i);
+            @slon_db_save_bookmarks_to_disk;
+            break;
+        }
+    }
+}
+
 Bool @slon_api_status_is_favourited(SlonHttpSession* session, JsonObject* status, U8* account_id)
 {
     no_warn session;

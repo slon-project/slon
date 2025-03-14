@@ -86,6 +86,26 @@ U0 @slon_db_load_private_keys_from_disk()
     db->set("private_keys", Json.ParseFile(scratch_buffer, slon_db_mem_task), JSON_OBJECT);
 }
 
+U0 @slon_db_load_bookmarks_from_disk()
+{
+    JsonObject* bookmarks = Json.CreateObject(slon_db_mem_task);
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/bookmarks/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonArray* bookmark_array = NULL;
+    while (de) {
+        bookmark_array = Json.ParseFile(de->full_name, slon_db_mem_task);
+        if (bookmark_array) {
+            StrFind(".json", de->name)[0] = NULL;
+            bookmarks->set(de->name, bookmark_array, JSON_ARRAY);
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("bookmarks", bookmarks, JSON_OBJECT);
+}
+
 U0 @slon_db_load_favourites_from_disk()
 {
     JsonObject* favourites = Json.CreateObject(slon_db_mem_task);
@@ -299,6 +319,17 @@ U0 @slon_db_save_private_keys_to_disk()
     Json.DumpToFile(scratch_buffer, db->o("private_keys"), slon_db_mem_task);
 }
 
+U0 @slon_db_save_bookmarks_to_disk()
+{
+    U8 scratch_buffer[256];
+    JsonKey* key = db->o("bookmarks")->keys;
+    while (key) {
+        StrPrint(scratch_buffer, "%s/bookmarks/%s.json", SLON_DB_PATH, key->name);
+        Json.DumpToFile(scratch_buffer, key->value, slon_db_mem_task);
+        key = key->next;
+    }
+}
+
 U0 @slon_db_save_favourites_to_disk()
 {
     U8 scratch_buffer[256];
@@ -389,6 +420,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_actors_to_disk();
     @slon_db_save_announcements_to_disk();
     @slon_db_save_apps_to_disk();
+    @slon_db_save_bookmarks_to_disk();
     @slon_db_save_custom_emojis_to_disk();
     @slon_db_save_favourites_to_disk();
     @slon_db_save_followers_to_disk();
@@ -408,6 +440,7 @@ U0 @slon_db_load_from_defaults()
     db->set("actors", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("announcements", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
     db->set("apps", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    db->set("bookmarks", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("custom_emojis", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
     db->set("idempotency_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("private_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
@@ -439,6 +472,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_actors_from_disk();
     @slon_db_load_announcements_from_disk();
     @slon_db_load_apps_from_disk();
+    @slon_db_load_bookmarks_from_disk();
     @slon_db_load_custom_emojis_from_disk();
     db->set("idempotency_keys", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     @slon_db_load_private_keys_from_disk();
