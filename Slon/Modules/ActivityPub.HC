@@ -1,3 +1,6 @@
+SlonHttpSession* SLON_AP_DUMMY_SESSION = CAlloc(sizeof(SlonHttpSession));
+SLON_AP_DUMMY_SESSION->mem_task = slon_mem_task;
+
 Bool @slon_activitypub_status_exists(JsonArray* statuses, U8* uri)
 {
     if (!statuses || !uri) {
@@ -666,6 +669,171 @@ JsonObject* @slon_activitypub_status_by_uri(U8* uri, JsonArray* timeline)
     return NULL;
 }
 
+JsonObject* @slon_activitypub_create_status_for_remote_account(SlonHttpSession* session, JsonObject* remote_account, JsonObject* o, JsonObject* account = NULL, U8* user = NULL)
+{
+    if (db->o("statuses")->a(remote_account->@("id"))) {
+        if (@slon_activitypub_status_exists(db->o("statuses")->a(remote_account->@("id")), o->@("atomUri"))) {
+            if (session->status) {
+                // Don't set status if we're using SLON_AP_DUMMY_SESSION
+                session->status(200);
+            }
+            return @slon_api_find_status_by_uri(o->@("atomUri"), remote_account->@("id"));
+        }
+    }
+
+    I64 i;
+    JsonObject* new_status = Json.CreateObject(slon_mem_task);
+    U8* id = @slon_api_generate_unique_id(session);
+
+    JsonArray* media_attachments = Json.CreateArray(slon_mem_task);
+    if (o->@("attachment")) {
+        JsonObject* attachment_item = NULL;
+        JsonObject* media_attachment = NULL;
+        JsonObject* media_meta = NULL;
+        JsonArray* attachment_array = o->@("attachment");
+        for (i = 0; i < attachment_array->length; i++) {
+            attachment_item = attachment_array->o(i);
+            if (attachment_item && attachment_item->@("mediaType") && String.BeginsWith("image", attachment_item->@("mediaType"))) {
+                media_attachment = Json.CreateObject(slon_mem_task);
+                media_meta = Json.CreateObject(slon_mem_task);
+                media_attachment->set("id", "", JSON_STRING);
+                media_attachment->set("type", "image", JSON_STRING);
+                media_attachment->set("url", attachment_item->@("url"), JSON_STRING);
+                media_attachment->set("preview_url", NULL, JSON_NULL);
+                media_attachment->set("remote_url", NULL, JSON_NULL);
+                if (attachment_item->@("width") && attachment_item->@("height")) {
+                    media_meta->set("original", Json.CreateObject(slon_mem_task), JSON_OBJECT);
+                    media_meta->o("original")->set("width", attachment_item->@("width"), JSON_NUMBER);
+                    media_meta->o("original")->set("height", attachment_item->@("height"), JSON_NUMBER);
+                }
+                if (attachment_item->@("summary")) {
+                    media_attachment->set("description", attachment_item->@("summary"), JSON_STRING);
+                } else {
+                    media_attachment->set("description", NULL, JSON_NULL);
+                }
+                if (attachment_item->@("blurhash")) {
+                    media_attachment->set("blurhash", attachment_item->@("blurhash"), JSON_STRING);
+                } else {
+                    media_attachment->set("blurhash", NULL, JSON_NULL);
+                }
+                media_attachment->set("meta", media_meta, JSON_OBJECT);
+                media_attachments->append(media_attachment);
+            }
+        }
+    }
+
+    if (account && (o->@("inReplyTo") || o->@("inReplyToAtomUri"))) {
+        JsonObject* reply_to_post = @slon_activitypub_status_by_uri(o->@("inReplyTo"), db->o("timelines")->o("home")->a(account->@("id")));
+        if (reply_to_post) {
+            new_status->set("in_reply_to_id", reply_to_post->@("id"), JSON_STRING);
+            new_status->set("in_reply_to_acct_id", reply_to_post->o("account")->@("id"), JSON_STRING);
+        }
+    }
+
+    new_status->set("id", id, JSON_STRING);
+    new_status->set("created_at", o->@("published"), JSON_STRING);
+    new_status->set("content", o->@("content"), JSON_STRING);
+    new_status->set("visibility", "public", JSON_STRING);
+    new_status->set("uri", o->@("atomUri"), JSON_STRING);
+    new_status->set("url", o->@("url"), JSON_STRING);
+    new_status->set("account", remote_account, JSON_OBJECT);
+    // new_status->set("application", status_app, JSON_OBJECT);
+    new_status->set("reblogs_count", 0, JSON_NUMBER);
+    new_status->set("favourites_count", 0, JSON_NUMBER);
+    new_status->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("tags", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("media_attachments", media_attachments, JSON_ARRAY);
+    new_status->set("replies_count", 0, JSON_NUMBER);
+    new_status->set("spoiler_text", "", JSON_STRING);
+    new_status->set("sensitive", o->@("sensitive"), JSON_BOOLEAN);
+
+    @slon_api_create_status(new_status, remote_account->@("id"), user);
+
+    @slon_free(session, id);
+    return new_status;
+}
+
+U0 @slon_activitypub_reblog_status(SlonHttpSession* session, JsonObject* o, JsonObject* reblogged_status)
+{
+    JsonObject* remote_account = @slon_api_account_by_remote_actor(o->@("actor_for_key_id"));
+    if (!remote_account) {
+        AdamLog("remote account is NULL");
+        return;
+    }
+
+    reblogged_status->set("reblogs_count", reblogged_status->@("reblogs_count") + 1, JSON_NUMBER);
+    @slon_db_save_status_to_disk(reblogged_status);
+
+    JsonObject* new_status = Json.CreateObject(slon_mem_task);
+    U8* id = @slon_api_generate_unique_id(session);
+
+    new_status->set("id", id, JSON_STRING);
+    new_status->set("in_reply_to_id", NULL, JSON_NULL);
+    new_status->set("in_reply_to_account_id", NULL, JSON_NULL);
+    new_status->set("content", "", JSON_STRING);
+    new_status->set("created_at", o->o("request")->@("published"), JSON_STRING);
+    new_status->set("visibility", "public", JSON_STRING);
+    new_status->set("uri", reblogged_status->@("uri"), JSON_STRING);
+    new_status->set("url", reblogged_status->@("url"), JSON_STRING);
+    new_status->set("account", remote_account, JSON_OBJECT);
+    // new_status->set("application", status_app, JSON_OBJECT);
+    new_status->set("reblogs_count", 0, JSON_NUMBER);
+    new_status->set("favourites_count", 0, JSON_NUMBER);
+    new_status->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("tags", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("media_attachments", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    new_status->set("replies_count", 0, JSON_NUMBER);
+    new_status->set("spoiler_text", "", JSON_STRING);
+    new_status->set("sensitive", o->@("sensitive"), JSON_BOOLEAN);
+    new_status->set("reblog", reblogged_status, JSON_OBJECT);
+
+    @slon_api_create_status(new_status, remote_account->@("id"), o->@("user"));
+
+    @slon_free(session, id);
+}
+
+U0 @slon_activitypub_async_announce_request(JsonObject* o)
+{
+    Sleep(2000);
+    if (!o) {
+        return;
+    }
+
+    U8* reblogged_status_uri = o->o("request")->@("object");
+    U8* reblogged_status_actor = StrNew(reblogged_status_uri, slon_mem_task);
+    StrFind("/statuses/", reblogged_status_actor)[0] = NULL;
+
+    // Does the user exist on this server? If yes, retrieve; if not, fetch and create them
+    JsonObject* reblogged_status_account = @slon_activitypub_get_account_for_remote_actor(SLON_AP_DUMMY_SESSION, reblogged_status_actor);
+    if (!reblogged_status_account) {
+        // FIXME: We probably should handle this, or not.. it will just stay queued and retry until we Accept
+        return;
+    }
+
+    // Fetch the status to be reblogged
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
+    U8* signatory = db->o("actors")->o(o->@("user"))->@("id");
+    @http_response* resp = @slon_activitypub_signed_request(reblogged_status_uri, fetch_buffer, NULL, SLON_HTTP_VERB_GET, signatory);
+
+    // AdamLog("code: %d\n", resp->status.code);
+
+    // Create the status if it does not already exist on this server
+    JsonObject* remote_status = Json.Parse(resp->body.data, slon_db_mem_task);
+    JsonObject* reblog_status = @slon_activitypub_create_status_for_remote_account(SLON_AP_DUMMY_SESSION, reblogged_status_account, remote_status);
+
+    AdamLog("reblog_status: %s\n", Json.Stringify(reblog_status, slon_mem_task));
+
+    // Create the reblog
+    @slon_activitypub_reblog_status(SLON_AP_DUMMY_SESSION, o, reblog_status);
+
+    // Send the Accept request
+    Spawn(&@slon_activitypub_async_accept_request, o, "SlonAsyncAcceptTask");
+
+    Free(fetch_buffer);
+}
+
 U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
@@ -684,22 +852,18 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     U8* status_id = NULL;
 
     if (!StrICmp("announce", request_json->@("type"))) {
-        if (StrICmp(session->actor_for_key_id, request_json->@("actor"))) {
+        if (StrICmp(session->actor_for_key_id, request_json->@("actor")) || !@slon_api_user_is_following(user, session->actor_for_key_id)) {
             session->status(401);
             return;
         }
-        status_id = StrFind("/", StrFind("/statuses/", request_json->@("object")) + 1) + 1;
-        statuses = db->o("statuses")->a(account->@("id"));
-        for (i = 0; i < statuses->length; i++) {
-            status = statuses->@(i);
-            if (!StrICmp(status_id, status->@("id"))) {
-                // TODO: https://docs.joinmastodon.org/methods/statuses/#reblogged_by
-                status->set("reblog_count", status->@("reblog_count") + 1);
-                break;
-            }
-        }
-        @slon_db_save_statuses_to_disk;
-        request_object = Json.Clone(request_json, slon_mem_task);
+
+        JsonObject* announce = Json.CreateObject(slon_mem_task);
+        announce->set("actor_for_key_id", session->actor_for_key_id, JSON_STRING);
+        announce->set("user", user, JSON_STRING);
+        announce->set("request", Json.Clone(request_json, slon_mem_task), JSON_OBJECT);
+        Spawn(&@slon_activitypub_async_announce_request, announce, "SlonAsyncAnnounceTask");
+        session->status(200);
+        return;
     }
 
     if (!StrICmp("follow", request_json->@("type"))) {
@@ -798,87 +962,15 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             session->status(401);
             return;
         }
+
         JsonObject* remote_account = @slon_activitypub_get_account_for_remote_actor(session, request_json->@("actor"));
         if (!remote_account) {
             session->status(500);
             return;
         }
-        if (db->o("statuses")->a(remote_account->@("id"))) {
-            if (@slon_activitypub_status_exists(db->o("statuses")->a(remote_account->@("id")), request_json->o("object")->@("atomUri"))) {
-                session->status(200);
-                return;
-            }
-        }
 
-        JsonObject* new_status = Json.CreateObject(slon_mem_task);
-        U8* id = @slon_api_generate_unique_id(session);
+        @slon_activitypub_create_status_for_remote_account(session, remote_account, request_json->o("object"), account, user);
 
-        JsonArray* media_attachments = Json.CreateArray(slon_mem_task);
-        if (request_json->o("object")->@("attachment")) {
-            JsonObject* attachment_item = NULL;
-            JsonObject* media_attachment = NULL;
-            JsonObject* media_meta = NULL;
-            JsonArray* attachment_array = request_json->o("object")->@("attachment");
-            for (i = 0; i < attachment_array->length; i++) {
-                attachment_item = attachment_array->o(i);
-                if (attachment_item && attachment_item->@("mediaType") && String.BeginsWith("image", attachment_item->@("mediaType"))) {
-                    media_attachment = Json.CreateObject(slon_mem_task);
-                    media_meta = Json.CreateObject(slon_mem_task);
-                    media_attachment->set("id", "", JSON_STRING);
-                    media_attachment->set("type", "image", JSON_STRING);
-                    media_attachment->set("url", attachment_item->@("url"), JSON_STRING);
-                    media_attachment->set("preview_url", NULL, JSON_NULL);
-                    media_attachment->set("remote_url", NULL, JSON_NULL);
-                    if (attachment_item->@("width") && attachment_item->@("height")) {
-                        media_meta->set("original", Json.CreateObject(slon_mem_task), JSON_OBJECT);
-                        media_meta->o("original")->set("width", attachment_item->@("width"), JSON_NUMBER);
-                        media_meta->o("original")->set("height", attachment_item->@("height"), JSON_NUMBER);
-                    }
-                    if (attachment_item->@("summary")) {
-                        media_attachment->set("description", attachment_item->@("summary"), JSON_STRING);
-                    } else {
-                        media_attachment->set("description", NULL, JSON_NULL);
-                    }
-                    if (attachment_item->@("blurhash")) {
-                        media_attachment->set("blurhash", attachment_item->@("blurhash"), JSON_STRING);
-                    } else {
-                        media_attachment->set("blurhash", NULL, JSON_NULL);
-                    }
-                    media_attachment->set("meta", media_meta, JSON_OBJECT);
-                    media_attachments->append(media_attachment);
-                }
-            }
-        }
-
-        if (request_json->o("object")->@("inReplyTo") || request_json->o("object")->@("inReplyToAtomUri")) {
-            JsonObject* reply_to_post = @slon_activitypub_status_by_uri(request_json->o("object")->@("inReplyTo"), db->o("timelines")->o("home")->a(account->@("id")));
-            if (reply_to_post) {
-                new_status->set("in_reply_to_id", reply_to_post->@("id"), JSON_STRING);
-                new_status->set("in_reply_to_acct_id", reply_to_post->o("account")->@("id"), JSON_STRING);
-            }
-        }
-
-        new_status->set("id", id, JSON_STRING);
-        new_status->set("created_at", request_json->@("published"), JSON_STRING);
-        new_status->set("content", request_json->o("object")->@("content"), JSON_STRING);
-        new_status->set("visibility", "public", JSON_STRING);
-        new_status->set("uri", request_json->o("object")->@("atomUri"), JSON_STRING);
-        new_status->set("url", request_json->o("object")->@("url"), JSON_STRING);
-        new_status->set("account", remote_account, JSON_OBJECT);
-        // new_status->set("application", status_app, JSON_OBJECT);
-        new_status->set("reblogs_count", 0, JSON_NUMBER);
-        new_status->set("favourites_count", 0, JSON_NUMBER);
-        new_status->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
-        new_status->set("tags", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
-        new_status->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
-        new_status->set("media_attachments", media_attachments, JSON_ARRAY);
-        new_status->set("replies_count", 0, JSON_NUMBER);
-        new_status->set("spoiler_text", "", JSON_STRING);
-        new_status->set("sensitive", request_json->o("object")->@("sensitive"), JSON_BOOLEAN);
-
-        @slon_api_create_status(new_status, remote_account->@("id"), user);
-
-        @slon_free(session, id);
         request_object = Json.CreateObject(slon_mem_task);
         request_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
         request_object->set("id", request_json->@("id"), JSON_STRING);

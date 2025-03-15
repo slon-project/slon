@@ -477,6 +477,22 @@ JsonObject* @slon_api_status_lookup_by_in_reply_to_id(U8* id, JsonArray* statuse
     return NULL;
 }
 
+JsonObject* @slon_api_status_lookup_by_uri(U8* uri, JsonArray* statuses)
+{
+    if (!uri || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && status->@("uri") && !StrICmp(status->@("uri"), uri)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
 JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id = NULL)
 {
     if (account_id) {
@@ -486,6 +502,23 @@ JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id = NULL)
     JsonKey* key = db->o("statuses")->keys;
     while (key) {
         status = @slon_api_status_lookup_by_id(id, key->value);
+        if (status) {
+            return status;
+        }
+        key = key->next;
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_find_status_by_uri(U8* uri, U8* account_id = NULL)
+{
+    if (account_id) {
+        return @slon_api_status_lookup_by_uri(uri, db->o("statuses")->a(account_id));
+    }
+    JsonObject* status = NULL;
+    JsonKey* key = db->o("statuses")->keys;
+    while (key) {
+        status = @slon_api_status_lookup_by_uri(uri, key->value);
         if (status) {
             return status;
         }
@@ -584,4 +617,19 @@ Bool @slon_api_get_value_as_boolean(JsonKey* key)
     default:
         return FALSE;
     }
+}
+
+Bool @slon_api_user_is_following(U8* user, U8* actor)
+{
+    JsonArray* iter_following = db->o("following")->a(user);
+    if (!iter_following) {
+        return FALSE;
+    }
+    I64 i;
+    for (i = 0; i < iter_following->length; i++) {
+        if (!StrICmp(actor, iter_following->@(i))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
