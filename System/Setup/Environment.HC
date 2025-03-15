@@ -90,7 +90,7 @@ U0 @malloc_mem_tasks_init()
 @malloc_mem_tasks_init;
 
 U0 dd() { DocDump(adam_task->put_doc); }
-//@patch_jmp_rel32(&Dbg2, &Reboot); // Reboot instead of crashing to the debugger
+//@patch_jmp_rel32(&Fault2, &Reboot); // Reboot instead of crashing to the debugger
 U0 NoBeep(I8, Bool) {};
 @patch_jmp_rel32(&Beep, &NoBeep); // Don't delay on beep when entering debugger
 
