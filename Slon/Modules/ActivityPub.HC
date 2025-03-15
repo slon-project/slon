@@ -28,6 +28,10 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
     no_warn scratch_buffer;
 
+    if (db->o("settings")->@("http_signature_is_always_valid")) {
+        goto http_signature_skip_digest_check;
+    }
+
     // 1. Check that we have a signature and digest
     if (!StrLen(session->header("signature")) || !StrLen(session->header("digest"))) {
         AdamLog("[verify_signature] no signature or digest header present\n");
@@ -59,6 +63,7 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
         Free(computed_digest);
     }
 
+http_signature_skip_digest_check:
     // Parse values from Signature header
     U8* signature_header = session->header("signature");
     I64 signature_fragment_count = 0;
@@ -100,6 +105,10 @@ Bool @slon_activitypub_http_signature_is_valid(SlonHttpSession* session, U8* use
     }
     session->actor_for_key_id = @slon_strnew(session, keyId);
     StrFind("#", session->actor_for_key_id)[0] = NULL;
+
+    if (db->o("settings")->@("http_signature_is_always_valid")) {
+        return TRUE;
+    }
 
     // Check if public key is cached for keyId, if not, fetch it
     if (!db->o("public_keys")->@(keyId)) {
