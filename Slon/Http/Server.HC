@@ -843,7 +843,6 @@ slon_http_task_send_response:
 
     @slon_http_free_session(session);
 
-    AdamLog("\n");
     s->close();
 }
 
