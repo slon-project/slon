@@ -342,7 +342,6 @@ U0 @slon_admin_new_announcement(SlonHttpSession* session)
 U0 @slon_admin_new_custom_emoji(SlonHttpSession* session)
 {
     SLON_SCRATCH_BUFFER_AND_REQUEST_JSON
-    no_warn scratch_buffer;
 
     SlonMultipartFile* file = request_json->@("image-file");
     if (!file || !file->buffer || !file->size || !file->content_type) {
