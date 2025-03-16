@@ -523,6 +523,54 @@ U0 @slon_activitypub_async_create_status_to(JsonObject* status, U8* dest)
     Free(fetch_buffer);
 }
 
+U0 @slon_activitypub_async_boost_status_to(JsonObject* status, U8* dest)
+{
+    Sleep(1000);
+    I64 i;
+
+    U8 scratch_buffer[2048];
+
+    // U8* this_actor = StrNew(status->@("uri"), slon_mem_task);
+    // StrFind("/statuses/", this_actor)[0] = NULL;
+    U8* this_actor = db->o("actors")->o(status->o("account")->@("acct"))->@("id");
+    if (!this_actor) {
+        AdamLog("slon_activitypub_async_boost_status_to: this_actor is NULL\n");
+        return;
+    }
+
+    JsonObject* announce_object = Json.CreateObject(slon_mem_task);
+
+    announce_object->set("@context", "https://www.w3.org/ns/activitystreams", JSON_STRING);
+    StrPrint(scratch_buffer, "%s/activity", status->@("uri"));
+    announce_object->set("id", scratch_buffer, JSON_STRING);
+    announce_object->set("type", "Announce", JSON_STRING);
+    announce_object->set("actor", this_actor, JSON_STRING);
+    announce_object->set("object", status->o("reblog")->@("uri"), JSON_STRING);
+    announce_object->set("published", status->@("created_at"), JSON_STRING);
+    announce_object->set("to", Json.Parse("[\"https://www.w3.org/ns/activitystreams#Public\"]", slon_mem_task), JSON_ARRAY);
+    JsonArray* cc = Json.CreateArray(slon_mem_task);
+    StrPrint(scratch_buffer, "%s/followers", this_actor);
+    cc->append(scratch_buffer, JSON_STRING);
+    announce_object->set("cc", cc, JSON_ARRAY);
+
+    U8* fetch_buffer = CAlloc(HTTP_FETCH_BUFFER_SIZE, slon_mem_task);
+    StrPrint(scratch_buffer, "%s/inbox", dest);
+    @slon_activitypub_signed_request(scratch_buffer, fetch_buffer, announce_object);
+    Free(fetch_buffer);
+}
+
+U0 @slon_activitypub_async_boost_status(JsonObject* status)
+{
+    I64 i;
+    JsonArray* followers = db->o("followers")->a(status->o("account")->@("username"));
+    if (!followers) {
+        return;
+    }
+    for (i = 0; i < followers->length; i++) {
+        @slon_activitypub_async_boost_status_to(status, followers->@(i));
+    }
+}
+
 U0 @slon_activitypub_async_create_status(JsonObject* status)
 {
     I64 i;
@@ -591,6 +639,11 @@ U0 @slon_activitypub_follow_fedi(JsonObject* follow)
     Spawn(&@slon_activitypub_async_follow, follow, "SlonAsyncFollowTask");
 }
 
+U0 @slon_activitypub_boost_status_fedi(JsonObject* status)
+{
+    Spawn(&@slon_activitypub_async_boost_status, status, "SlonAsyncBoostTask");
+}
+
 U0 @slon_activitypub_create_status_fedi(JsonObject* status)
 {
     Spawn(&@slon_activitypub_async_create_status, status, "SlonAsyncCreateTask");
@@ -602,6 +655,7 @@ U0 @slon_activitypub_delete_status_fedi(JsonObject* status)
 }
 
 @slon_api_follow_fedi = &@slon_activitypub_follow_fedi;
+@slon_api_status_boost_fedi = &@slon_activitypub_boost_status_fedi;
 @slon_api_status_create_fedi = &@slon_activitypub_create_status_fedi;
 @slon_api_status_delete_fedi = &@slon_activitypub_delete_status_fedi;
 

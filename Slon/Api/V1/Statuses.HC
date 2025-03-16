@@ -1,3 +1,4 @@
+U0 (*@slon_api_status_boost_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_create_fedi)(JsonObject* status) = NULL;
 U0 (*@slon_api_status_delete_fedi)(JsonObject* status) = NULL;
 
@@ -62,7 +63,14 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
         for (i = status_array->length - 1; i > -1; i--) {
             status = Json.Clone(status_array->o(i), session->mem_task);
             status_id = Str2I64(status->@("id"));
+            status->set("bookmarked", @slon_api_status_is_bookmarked(session, status, account_id), JSON_BOOLEAN);
             status->set("favourited", @slon_api_status_is_favourited(session, status, account_id), JSON_BOOLEAN);
+            if (@slon_api_status_is_reblogged(session, status, account_id)) {
+                status->set("reblogged", TRUE, JSON_BOOLEAN);
+                if (status->@("reblog")) {
+                    status->o("reblog")->set("reblogged", TRUE, JSON_BOOLEAN);
+                }
+            }
             exclude_status = FALSE;
             if (status->@("deleted")) {
                 exclude_status = TRUE;
@@ -80,6 +88,9 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
                 exclude_status = TRUE;
             }
             if (pinned && !status->@("pinned")) {
+                exclude_status = TRUE;
+            }
+            if (exclude_reblogs && status->@("reblogged")) {
                 exclude_status = TRUE;
             }
             if (!exclude_status) {
@@ -199,7 +210,14 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
         status = @slon_api_find_status_by_id(id, NULL);
         if (status) {
             status = Json.Clone(status, session->mem_task);
+            status->set("bookmarked", @slon_api_status_is_bookmarked(session, status, account_id), JSON_BOOLEAN);
             status->set("favourited", @slon_api_status_is_favourited(session, status, account_id), JSON_BOOLEAN);
+            if (@slon_api_status_is_reblogged(session, status, account_id)) {
+                status->set("reblogged", TRUE, JSON_BOOLEAN);
+                if (status->@("reblog")) {
+                    status->o("reblog")->set("reblogged", TRUE, JSON_BOOLEAN);
+                }
+            }
             session->send(status);
             return;
         }
@@ -223,6 +241,7 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
 
         U8* id = NULL;
         JsonObject* status = NULL;
+        JsonObject* boost = NULL;
 
         if (session->path_count() > 4) {
             id = session->path(3);
@@ -262,6 +281,25 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
                 status = Json.Clone(status, session->mem_task);
                 @slon_api_unfavourite_status(session, status, account_id);
                 status->set("favourited", FALSE, JSON_BOOLEAN);
+                session->send(status);
+                return;
+            }
+
+            if (!StrICmp("reblog", verb)) {
+                status = Json.Clone(status, slon_db_mem_task);
+                boost = Json.Clone(@slon_api_reblog_status(session, status, account_id), session->mem_task);
+                boost->set("reblogged", TRUE, JSON_BOOLEAN);
+                session->send(boost);
+                if (@slon_api_status_boost_fedi) {
+                    @slon_api_status_boost_fedi(Json.Clone(boost, slon_mem_task));
+                }
+                return;
+            }
+
+            if (!StrICmp("unreblog", verb)) {
+                status = Json.Clone(status, session->mem_task);
+                @slon_api_unreblog_status(session, status, account_id);
+                status->set("reblogged", FALSE, JSON_BOOLEAN);
                 session->send(status);
                 return;
             }

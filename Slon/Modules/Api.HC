@@ -147,6 +147,126 @@ JsonObject* @slon_api_announcement_by_id(U8* id)
     return NULL;
 }
 
+JsonObject* @slon_api_status_lookup_by_id(U8* id, JsonArray* statuses)
+{
+    if (!id || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && status->@("id") && !StrICmp(status->@("id"), id)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_status_lookup_by_in_reply_to_id(U8* id, JsonArray* statuses)
+{
+    if (!id || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && status->@("in_reply_to_id") && !StrICmp(status->@("in_reply_to_id"), id)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_status_lookup_by_uri(U8* uri, JsonArray* statuses)
+{
+    if (!uri || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && status->@("uri") && !StrICmp(status->@("uri"), uri)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id = NULL)
+{
+    if (account_id) {
+        return @slon_api_status_lookup_by_id(id, db->o("statuses")->a(account_id));
+    }
+    JsonObject* status = NULL;
+    JsonKey* key = db->o("statuses")->keys;
+    while (key) {
+        status = @slon_api_status_lookup_by_id(id, key->value);
+        if (status) {
+            return status;
+        }
+        key = key->next;
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_find_status_by_uri(U8* uri, U8* account_id = NULL)
+{
+    if (account_id) {
+        return @slon_api_status_lookup_by_uri(uri, db->o("statuses")->a(account_id));
+    }
+    JsonObject* status = NULL;
+    JsonKey* key = db->o("statuses")->keys;
+    while (key) {
+        status = @slon_api_status_lookup_by_uri(uri, key->value);
+        if (status) {
+            return status;
+        }
+        key = key->next;
+    }
+    return NULL;
+}
+
+U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = NULL)
+{
+    if (!status || !account_id) {
+        return;
+    }
+    if (!db->o("statuses")->a(account_id)) {
+        db->o("statuses")->set(account_id, Json.CreateArray(slon_mem_task), JSON_ARRAY);
+    }
+    db->o("statuses")->a(account_id)->append(status);
+    @slon_db_save_status_to_disk(status);
+    @slon_db_instance_increment_status_count;
+    @slon_db_save_instance_to_disk;
+
+    JsonObject* status_item = Json.CreateObject(slon_mem_task);
+    status_item->set("account_id", account_id, JSON_STRING);
+    status_item->set("status_id", status->@("id"), JSON_STRING);
+
+    // If account_id is a local account, publish to public timeline
+    JsonObject* acct = @slon_api_account_by_id(account_id);
+    if (!acct->@("remote_actor") && !StrICmp("public", status->@("visibility"))) {
+        if (!db->o("timelines")->a("public")) {
+            db->o("timelines")->set("public", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+        }
+        db->o("timelines")->a("public")->append(status_item);
+    }
+    // If account_id is a remote account, and we have an ActivityPub user, post to their timeline
+    if (acct->@("remote_actor") && to_ap_user) {
+        JsonObject* acct_for_ap_user = @slon_api_account_by_username(to_ap_user);
+        if (acct_for_ap_user) {
+            if (!db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))) {
+                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(slon_mem_task), JSON_ARRAY);
+            }
+            db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))->append(status_item);
+        }
+    }
+    @slon_db_save_timelines_to_disk;
+}
+
 Bool @slon_api_status_is_bookmarked(SlonHttpSession* session, JsonObject* status, U8* account_id)
 {
     no_warn session;
@@ -183,7 +303,7 @@ U0 @slon_api_bookmark_status(SlonHttpSession* session, JsonObject* status, U8* a
         }
     }
     if (!is_already_bookmarked) {
-        bookmark = Json.CreateObject(session->mem_task);
+        bookmark = Json.CreateObject(slon_db_mem_task);
         bookmark->set("status_id", status->@("id"), JSON_STRING);
         bookmark->set("account_id", status->o("account")->@("id"), JSON_STRING);
         bookmarks->append(bookmark);
@@ -229,6 +349,24 @@ Bool @slon_api_status_is_favourited(SlonHttpSession* session, JsonObject* status
     return FALSE;
 }
 
+Bool @slon_api_status_is_reblogged(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* reblogs = db->o("reblogs")->a(account_id);
+    JsonObject* reblog = NULL;
+    if (!reblogs) {
+        return FALSE;
+    }
+    I64 i;
+    for (i = 0; i < reblogs->length; i++) {
+        reblog = reblogs->o(i);
+        if (!StrICmp(reblog->@("boost_id"), status->@("id")) || !StrICmp(reblog->@("status_id"), status->@("id"))) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 U0 @slon_api_favourite_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
 {
     Bool is_already_favourited = FALSE;
@@ -247,7 +385,7 @@ U0 @slon_api_favourite_status(SlonHttpSession* session, JsonObject* status, U8* 
         }
     }
     if (!is_already_favourited) {
-        favourite = Json.CreateObject(session->mem_task);
+        favourite = Json.CreateObject(slon_db_mem_task);
         favourite->set("status_id", status->@("id"), JSON_STRING);
         favourite->set("account_id", status->o("account")->@("id"), JSON_STRING);
         favourites->append(favourite);
@@ -270,6 +408,97 @@ U0 @slon_api_unfavourite_status(SlonHttpSession* session, JsonObject* status, U8
         if (!StrICmp(favourite->@("status_id"), status->@("id")) && !StrICmp(favourite->@("account_id"), status->o("account")->@("id"))) {
             favourites->remove(i);
             @slon_db_save_favourites_to_disk;
+            break;
+        }
+    }
+}
+
+JsonObject* @slon_api_reblog_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    Bool is_already_reblogged = FALSE;
+    JsonArray* reblogs = db->o("reblogs")->a(account_id);
+    JsonObject* reblog = NULL;
+    if (!reblogs) {
+        reblogs = Json.CreateArray(slon_db_mem_task);
+        db->o("reblogs")->set(account_id, reblogs, JSON_ARRAY);
+        @slon_db_save_reblogs_to_disk;
+    }
+    I64 i;
+    for (i = 0; i < reblogs->length; i++) {
+        reblog = reblogs->o(i);
+        if (!StrICmp(reblog->@("status_id"), status->@("id")) && !StrICmp(reblog->@("account_id"), status->o("account")->@("id"))) {
+            return @slon_api_find_status_by_id(reblog->@("boost_id"), account_id);
+        }
+    }
+
+    // Create boost object, which is our reblog status with the original status attached as a "reblog" object
+    JsonObject* boost = Json.CreateObject(slon_db_mem_task);
+    U8* boost_id = @slon_api_generate_unique_id(session);
+    U8* boost_created_at = @slon_api_timestamp_from_cdate(session, Now);
+
+    boost->set("id", boost_id, JSON_STRING);
+    boost->set("in_reply_to_id", NULL, JSON_NULL);
+    boost->set("in_reply_to_account_id", NULL, JSON_NULL);
+    boost->set("content", "", JSON_STRING);
+    boost->set("created_at", boost_created_at, JSON_STRING);
+    boost->set("visibility", "public", JSON_STRING);
+    boost->set("uri", status->@("uri"), JSON_STRING);
+    boost->set("url", status->@("url"), JSON_STRING);
+    boost->set("account", @slon_api_account_by_id(account_id), JSON_OBJECT);
+    boost->set("reblogs_count", 0, JSON_NUMBER);
+    boost->set("favourites_count", 0, JSON_NUMBER);
+    boost->set("emojis", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    boost->set("tags", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    boost->set("mentions", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    boost->set("media_attachments", SLON_EMPTY_JSON_ARRAY, JSON_ARRAY);
+    boost->set("replies_count", 0, JSON_NUMBER);
+    boost->set("spoiler_text", "", JSON_STRING);
+    boost->set("sensitive", status->@("sensitive"), JSON_BOOLEAN);
+    boost->set("reblog", status, JSON_OBJECT);
+
+    @slon_api_create_status(boost, account_id);
+
+    // Create a reblog object which is a lookup to status_id, account_id, boost_id
+    reblog = Json.CreateObject(slon_db_mem_task);
+    reblog->set("status_id", status->@("id"), JSON_STRING);
+    reblog->set("account_id", status->o("account")->@("id"), JSON_STRING);
+    reblog->set("boost_id", boost->@("id"), JSON_STRING);
+    reblogs->append(reblog);
+    @slon_db_save_reblogs_to_disk;
+
+    status->set("reblogs_count", status->@("reblogs_count") + 1, JSON_NUMBER);
+    @slon_db_save_status_to_disk(status);
+
+    @slon_free(session, boost_created_at);
+    @slon_free(session, boost_id);
+
+    return boost;
+}
+
+U0 @slon_api_unreblog_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* reblogs = db->o("reblogs")->a(account_id);
+    JsonObject* reblog = NULL;
+    JsonObject* boost = NULL;
+    if (!reblogs) {
+        reblogs = Json.CreateArray(slon_db_mem_task);
+        db->o("reblogs")->set(account_id, reblogs, JSON_ARRAY);
+        @slon_db_save_reblogs_to_disk;
+    }
+    I64 i;
+    for (i = 0; i < reblogs->length; i++) {
+        reblog = reblogs->o(i);
+        if (!StrICmp(reblog->@("status_id"), status->@("id")) && !StrICmp(reblog->@("account_id"), status->o("account")->@("id"))) {
+            reblogs->remove(i);
+            @slon_db_save_reblogs_to_disk;
+            status->set("reblogs_count", status->@("reblogs_count") - 1, JSON_NUMBER);
+            @slon_db_save_status_to_disk(status);
+            boost = @slon_api_find_status_by_id(reblog->@("boost_id"), account_id);
+            if (boost) {
+                boost->set("deleted", TRUE, JSON_BOOLEAN);
+                @slon_db_save_status_to_disk(status);
+            }
             break;
         }
     }
@@ -443,126 +672,6 @@ U0 @slon_api_async_delete_from_catbox(U8* filename)
     Free(payload);
     Free(headers);
     Free(filename);
-}
-
-JsonObject* @slon_api_status_lookup_by_id(U8* id, JsonArray* statuses)
-{
-    if (!id || !statuses) {
-        return NULL;
-    }
-    I64 i;
-    JsonObject* status;
-    for (i = 0; i < statuses->length; i++) {
-        status = statuses->@(i);
-        if (!status->@("deleted") && status->@("id") && !StrICmp(status->@("id"), id)) {
-            return status;
-        }
-    }
-    return NULL;
-}
-
-JsonObject* @slon_api_status_lookup_by_in_reply_to_id(U8* id, JsonArray* statuses)
-{
-    if (!id || !statuses) {
-        return NULL;
-    }
-    I64 i;
-    JsonObject* status;
-    for (i = 0; i < statuses->length; i++) {
-        status = statuses->@(i);
-        if (!status->@("deleted") && status->@("in_reply_to_id") && !StrICmp(status->@("in_reply_to_id"), id)) {
-            return status;
-        }
-    }
-    return NULL;
-}
-
-JsonObject* @slon_api_status_lookup_by_uri(U8* uri, JsonArray* statuses)
-{
-    if (!uri || !statuses) {
-        return NULL;
-    }
-    I64 i;
-    JsonObject* status;
-    for (i = 0; i < statuses->length; i++) {
-        status = statuses->@(i);
-        if (!status->@("deleted") && status->@("uri") && !StrICmp(status->@("uri"), uri)) {
-            return status;
-        }
-    }
-    return NULL;
-}
-
-JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id = NULL)
-{
-    if (account_id) {
-        return @slon_api_status_lookup_by_id(id, db->o("statuses")->a(account_id));
-    }
-    JsonObject* status = NULL;
-    JsonKey* key = db->o("statuses")->keys;
-    while (key) {
-        status = @slon_api_status_lookup_by_id(id, key->value);
-        if (status) {
-            return status;
-        }
-        key = key->next;
-    }
-    return NULL;
-}
-
-JsonObject* @slon_api_find_status_by_uri(U8* uri, U8* account_id = NULL)
-{
-    if (account_id) {
-        return @slon_api_status_lookup_by_uri(uri, db->o("statuses")->a(account_id));
-    }
-    JsonObject* status = NULL;
-    JsonKey* key = db->o("statuses")->keys;
-    while (key) {
-        status = @slon_api_status_lookup_by_uri(uri, key->value);
-        if (status) {
-            return status;
-        }
-        key = key->next;
-    }
-    return NULL;
-}
-
-U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = NULL)
-{
-    if (!status || !account_id) {
-        return;
-    }
-    if (!db->o("statuses")->a(account_id)) {
-        db->o("statuses")->set(account_id, Json.CreateArray(slon_mem_task), JSON_ARRAY);
-    }
-    db->o("statuses")->a(account_id)->append(status);
-    @slon_db_save_status_to_disk(status);
-    @slon_db_instance_increment_status_count;
-    @slon_db_save_instance_to_disk;
-
-    JsonObject* status_item = Json.CreateObject(slon_mem_task);
-    status_item->set("account_id", account_id, JSON_STRING);
-    status_item->set("status_id", status->@("id"), JSON_STRING);
-
-    // If account_id is a local account, publish to public timeline
-    JsonObject* acct = @slon_api_account_by_id(account_id);
-    if (!acct->@("remote_actor") && !StrICmp("public", status->@("visibility"))) {
-        if (!db->o("timelines")->a("public")) {
-            db->o("timelines")->set("public", Json.CreateArray(slon_mem_task), JSON_ARRAY);
-        }
-        db->o("timelines")->a("public")->append(status_item);
-    }
-    // If account_id is a remote account, and we have an ActivityPub user, post to their timeline
-    if (acct->@("remote_actor") && to_ap_user) {
-        JsonObject* acct_for_ap_user = @slon_api_account_by_username(to_ap_user);
-        if (acct_for_ap_user) {
-            if (!db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))) {
-                db->o("timelines")->o("home")->set(acct_for_ap_user->@("id"), Json.CreateArray(slon_mem_task), JSON_ARRAY);
-            }
-            db->o("timelines")->o("home")->a(acct_for_ap_user->@("id"))->append(status_item);
-        }
-    }
-    @slon_db_save_timelines_to_disk;
 }
 
 JsonObject* @slon_api_get_timeline_item(JsonObject* timeline_item)
