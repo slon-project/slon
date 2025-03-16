@@ -126,6 +126,26 @@ U0 @slon_db_load_favourites_from_disk()
     db->set("favourites", favourites, JSON_OBJECT);
 }
 
+U0 @slon_db_load_votes_from_disk()
+{
+    JsonObject* votes = Json.CreateObject(slon_db_mem_task);
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/votes/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonArray* vote_array = NULL;
+    while (de) {
+        vote_array = Json.ParseFile(de->full_name, slon_db_mem_task);
+        if (vote_array) {
+            StrFind(".json", de->name)[0] = NULL;
+            votes->set(de->name, vote_array, JSON_ARRAY);
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("votes", votes, JSON_OBJECT);
+}
+
 U0 @slon_db_load_reblogs_from_disk()
 {
     JsonObject* reblogs = Json.CreateObject(slon_db_mem_task);
@@ -361,6 +381,17 @@ U0 @slon_db_save_favourites_to_disk()
     }
 }
 
+U0 @slon_db_save_votes_to_disk()
+{
+    U8 scratch_buffer[256];
+    JsonKey* key = db->o("votes")->keys;
+    while (key) {
+        StrPrint(scratch_buffer, "%s/votes/%s.json", SLON_DB_PATH, key->name);
+        Json.DumpToFile(scratch_buffer, key->value, slon_db_mem_task);
+        key = key->next;
+    }
+}
+
 U0 @slon_db_save_reblogs_to_disk()
 {
     U8 scratch_buffer[256];
@@ -464,6 +495,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_settings_to_disk();
     @slon_db_save_statuses_to_disk();
     @slon_db_save_timelines_to_disk();
+    @slon_db_save_votes_to_disk();
 }
 
 U0 @slon_db_load_from_defaults()
@@ -488,6 +520,7 @@ U0 @slon_db_load_from_defaults()
     db->set("settings", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("statuses", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("timelines", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    db->set("votes", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->o("timelines")->set("home", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->o("timelines")->set("public", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
     JsonObject* oauth = Json.CreateObject(slon_db_mem_task);
@@ -522,6 +555,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_settings_from_disk();
     @slon_db_load_statuses_from_disk();
     @slon_db_load_timelines_from_disk();
+    @slon_db_load_votes_from_disk();
     db->set("setup", TRUE, JSON_BOOLEAN);
 }
 
