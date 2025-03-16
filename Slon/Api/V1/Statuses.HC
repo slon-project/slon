@@ -40,6 +40,11 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
     Bool exclude_reblogs = @slon_api_get_value_as_boolean(request_json->@("exclude_reblogs", TRUE));
     Bool pinned = @slon_api_get_value_as_boolean(request_json->@("pinned", TRUE));
 
+    JsonObject* poll = NULL;
+    JsonArray* poll_choices = NULL;
+    JsonItem* poll_choice = NULL;
+    JsonArray* own_votes = NULL;
+
     no_warn exclude_reblogs;
     // FIXME: Implement "only_media", "exclude_reblogs", "tagged"
     Bool exclude_status = FALSE;
@@ -70,6 +75,27 @@ U0 @slon_api_v1_statuses_query(SlonHttpSession* session, JsonArray* status_array
                 if (status->@("reblog")) {
                     status->o("reblog")->set("reblogged", TRUE, JSON_BOOLEAN);
                 }
+            }
+            if (status->@("poll")) {
+                poll = status->o("poll");
+                poll_choices = @slon_api_status_poll_choices(session, status, account_id);
+                poll_choice = NULL;
+                own_votes = Json.CreateArray(session->mem_task);
+                for (i = 0; i < poll_choices->length; i++) {
+                    poll_choice = poll_choices->@(i, TRUE);
+                    switch (poll_choice->type) {
+                    case JSON_NUMBER:
+                        own_votes->append(poll_choice->value, JSON_NUMBER);
+                        break;
+                    case JSON_STRING:
+                        own_votes->append(Str2I64(poll_choice->value), JSON_NUMBER);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                poll->set("voted", poll_choices > NULL, JSON_BOOLEAN);
+                poll->set("own_votes", own_votes, JSON_ARRAY);
             }
             exclude_status = FALSE;
             if (status->@("deleted")) {
@@ -182,6 +208,11 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
     U8* id = session->path(3);
     JsonObject* status = NULL;
 
+    JsonObject* poll = NULL;
+    JsonArray* poll_choices = NULL;
+    JsonItem* poll_choice = NULL;
+    JsonArray* own_votes = NULL;
+
     if (@slon_api_authorized(session)) {
         SLON_AUTH_ACCOUNT_ID
 
@@ -217,6 +248,28 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
                 if (status->@("reblog")) {
                     status->o("reblog")->set("reblogged", TRUE, JSON_BOOLEAN);
                 }
+            }
+            if (status->@("poll")) {
+                poll = status->o("poll");
+                poll_choices = @slon_api_status_poll_choices(session, status, account_id);
+                poll_choice = NULL;
+                own_votes = Json.CreateArray(session->mem_task);
+                I64 i;
+                for (i = 0; i < poll_choices->length; i++) {
+                    poll_choice = poll_choices->@(i, TRUE);
+                    switch (poll_choice->type) {
+                    case JSON_NUMBER:
+                        own_votes->append(poll_choice->value, JSON_NUMBER);
+                        break;
+                    case JSON_STRING:
+                        own_votes->append(Str2I64(poll_choice->value), JSON_NUMBER);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                poll->set("voted", poll_choices > NULL, JSON_BOOLEAN);
+                poll->set("own_votes", own_votes, JSON_ARRAY);
             }
             session->send(status);
             return;

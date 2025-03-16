@@ -950,6 +950,14 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
     JsonArray* statuses = NULL;
 
     JsonObject* status = NULL;
+    JsonObject* poll = NULL;
+
+    JsonArray* poll_options = NULL;
+    JsonObject* poll_option = NULL;
+    I64 votes_count = 0;
+
+    JsonArray* ap_poll_options = NULL;
+    JsonObject* ap_poll_option = NULL;
 
     JsonObject* request_object = NULL;
     U8* status_id = NULL;
@@ -1098,6 +1106,39 @@ U0 @slon_activitypub_users_inbox(SlonHttpSession* session, U8* user)
             }
         }
         @slon_db_save_status_to_disk(status);
+        request_object = Json.Clone(request_json, slon_mem_task);
+    }
+
+    if (!StrICmp("update", request_json->@("type"))) {
+        if (request_json->o("object") && !StrICmp("question", request_json->o("object")->@("type"))) {
+            status_id = StrFind("/", StrFind("/statuses/", request_json->o("object")->@("id")) + 1) + 1;
+            status = @slon_api_find_status_by_id(status_id, @slon_api_account_by_remote_actor(request_json->@("actor")));
+            if (status) {
+                // Update local copy of poll with latest vote counts
+                poll = status->o("poll");
+                poll_options = poll->a("options");
+
+                if (request_json->o("object")->a("anyOf")) {
+                    ap_poll_options = request_json->o("object")->a("anyOf");
+                }
+                if (request_json->o("object")->a("oneOf")) {
+                    ap_poll_options = request_json->o("object")->a("oneOf");
+                }
+                if (ap_poll_options) {
+                    for (i = 0; i < ap_poll_options->length; i++) {
+                        ap_poll_option = ap_poll_options->@(i);
+                        for (j = 0; j < poll_options->length; j++) {
+                            poll_option = poll_options->o(j);
+                            if (!StrICmp(ap_poll_option->@("name"), poll_option->@("title"))) {
+                                poll_option->set("votes_count", ap_poll_option->o("replies")->@("totalItems"), JSON_NUMBER);
+                                votes_count += ap_poll_option->o("replies")->@("totalItems");
+                            }
+                        }
+                    }
+                    @slon_db_save_status_to_disk(status);
+                }
+            }
+        }
         request_object = Json.Clone(request_json, slon_mem_task);
     }
 

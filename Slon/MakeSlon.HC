@@ -22,6 +22,7 @@ WinMax(Fs);
 #include "Api/V1/Markers";
 #include "Api/V1/Media";
 #include "Api/V1/Notifications";
+#include "Api/V1/Polls";
 #include "Api/V1/Statuses";
 #include "Api/V1/Timelines";
 

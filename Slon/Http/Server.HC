@@ -681,6 +681,7 @@ U0 @slon_http_handle_get_request(SlonHttpSession* session)
     #include "Endpoints/Get/Notifications";
     #include "Endpoints/Get/NodeInfo";
     #include "Endpoints/Get/OAuth";
+    #include "Endpoints/Get/Polls";
     #include "Endpoints/Get/Search";
     #include "Endpoints/Get/Statuses";
     #include "Endpoints/Get/Suggestions";
@@ -743,6 +744,7 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
     #include "Endpoints/Post/Markers";
     #include "Endpoints/Post/Media";
     #include "Endpoints/Post/OAuth";
+    #include "Endpoints/Post/Polls";
     #include "Endpoints/Post/Statuses";
 
     /* clang-format on */

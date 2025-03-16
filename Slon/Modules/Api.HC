@@ -179,6 +179,22 @@ JsonObject* @slon_api_status_lookup_by_in_reply_to_id(U8* id, JsonArray* statuse
     return NULL;
 }
 
+JsonObject* @slon_api_status_lookup_by_poll_id(U8* id, JsonArray* statuses)
+{
+    if (!id || !statuses) {
+        return NULL;
+    }
+    I64 i;
+    JsonObject* status;
+    for (i = 0; i < statuses->length; i++) {
+        status = statuses->@(i);
+        if (!status->@("deleted") && status->@("poll") && !StrICmp(status->o("poll")->@("id"), id)) {
+            return status;
+        }
+    }
+    return NULL;
+}
+
 JsonObject* @slon_api_status_lookup_by_uri(U8* uri, JsonArray* statuses)
 {
     if (!uri || !statuses) {
@@ -204,6 +220,23 @@ JsonObject* @slon_api_find_status_by_id(U8* id, U8* account_id = NULL)
     JsonKey* key = db->o("statuses")->keys;
     while (key) {
         status = @slon_api_status_lookup_by_id(id, key->value);
+        if (status) {
+            return status;
+        }
+        key = key->next;
+    }
+    return NULL;
+}
+
+JsonObject* @slon_api_find_status_by_poll_id(U8* id, U8* account_id = NULL)
+{
+    if (account_id) {
+        return @slon_api_status_lookup_by_poll_id(id, db->o("statuses")->a(account_id));
+    }
+    JsonObject* status = NULL;
+    JsonKey* key = db->o("statuses")->keys;
+    while (key) {
+        status = @slon_api_status_lookup_by_poll_id(id, key->value);
         if (status) {
             return status;
         }
@@ -283,6 +316,24 @@ Bool @slon_api_status_is_bookmarked(SlonHttpSession* session, JsonObject* status
         }
     }
     return FALSE;
+}
+
+JsonArray* @slon_api_status_poll_choices(SlonHttpSession* session, JsonObject* status, U8* account_id)
+{
+    no_warn session;
+    JsonArray* votes = db->o("votes")->a(account_id);
+    JsonObject* vote = NULL;
+    if (!votes) {
+        return NULL;
+    }
+    I64 i;
+    for (i = 0; i < votes->length; i++) {
+        vote = votes->o(i);
+        if (!StrICmp(vote->@("status_id"), status->@("id")) && !StrICmp(vote->@("account_id"), account_id)) {
+            return vote->a("choices");
+        }
+    }
+    return NULL;
 }
 
 U0 @slon_api_bookmark_status(SlonHttpSession* session, JsonObject* status, U8* account_id)
