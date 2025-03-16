@@ -739,6 +739,14 @@ JsonObject* @slon_activitypub_create_status_for_remote_account(SlonHttpSession* 
     JsonObject* new_status = Json.CreateObject(slon_mem_task);
     U8* id = @slon_api_generate_unique_id(session);
 
+    JsonObject* poll = NULL;
+    JsonArray* poll_ap_options = NULL;
+    JsonArray* poll_options = NULL;
+    JsonObject* poll_ap_option = NULL;
+    JsonObject* poll_option = NULL;
+    U8* poll_id = NULL;
+    I64 votes_count = 0;
+
     JsonArray* media_attachments = Json.CreateArray(slon_mem_task);
     if (o->@("attachment")) {
         JsonObject* attachment_item = NULL;
@@ -801,6 +809,47 @@ JsonObject* @slon_activitypub_create_status_for_remote_account(SlonHttpSession* 
     new_status->set("replies_count", 0, JSON_NUMBER);
     new_status->set("spoiler_text", "", JSON_STRING);
     new_status->set("sensitive", o->@("sensitive"), JSON_BOOLEAN);
+
+    if (!StrICmp("question", o->@("type"))) {
+        poll = Json.CreateObject(slon_db_mem_task);
+        poll_options = Json.CreateArray(slon_db_mem_task);
+
+        if (o->@("anyOf")) {
+            poll->set("multiple", TRUE, JSON_BOOLEAN);
+            poll_ap_options = o->a("anyOf");
+        }
+
+        if (o->@("oneOf")) {
+            poll->set("multiple", FALSE, JSON_BOOLEAN);
+            poll_ap_options = o->a("oneOf");
+        }
+
+        for (i = 0; i < poll_ap_options->length; i++) {
+            poll_ap_option = poll_ap_options->@(i);
+            poll_option = Json.CreateObject(slon_db_mem_task);
+            poll_option->set("title", poll_ap_option->@("name"), JSON_STRING);
+            poll_option->set("votes_count", poll_ap_option->o("replies")->@("totalItems"), JSON_NUMBER);
+            poll_options->append(poll_option);
+            votes_count += poll_option->@("votes_count");
+        }
+
+        poll_id = @slon_api_generate_unique_id(session);
+        poll->set("id", poll_id, JSON_STRING);
+
+        poll->set("expired", FALSE, JSON_BOOLEAN);
+        if (o->@("endTime")) {
+            poll->set("expires_at", o->@("endTime"), JSON_STRING);
+        } else {
+            poll->set("expires_at", NULL, JSON_NULL);
+        }
+        poll->set("options", poll_options, JSON_ARRAY);
+        poll->set("emojis", Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
+        poll->set("votes_count", votes_count, JSON_NUMBER);
+        poll->set("voters_count", NULL, JSON_NULL);
+
+        new_status->set("poll", poll, JSON_OBJECT);
+        @slon_free(session, poll_id);
+    }
 
     @slon_api_create_status(new_status, remote_account->@("id"), user);
 
