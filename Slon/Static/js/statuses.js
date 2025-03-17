@@ -73,13 +73,20 @@ function updateStatuses(user, statuses) {
     statuses.sort((a, b) => b.id - a.id);
     for (var i = 0; i < statuses.length; i++) {
         let status = statuses[i];
+        if (statuses[i]["reblog"]) {
+            status = statuses[i]["reblog"];
+        }
         let container = document.createElement('div');
         container.className = "status-container";
         let content = document.createElement('div');
         content.className = "status-content";
         let content_html = "";
-        if (status["visibility"] == "public") {
-            content_html += "<span title=Public>&#127758;</span> ";
+        if (statuses[i]["reblog"]) {
+            content_html += "&#128640; " + statuses[i]["reblog"]["account"]["username"] + "<br><a style=\"padding-left:36px\" href=\"" + statuses[i]["reblog"]["remote_actor"] + "\">@" + statuses[i]["reblog"]["account"]["acct"] + "</a><br>";
+        } else {
+            if (status["visibility"] == "public") {
+                content_html += "<span title=Public>&#127758;</span> ";
+            }
         }
         content_html += "<span class=status-timestamp>" + smolDate(dayjs(status["created_at"]).fromNow()) + "</span><br></div>";
         content_html += "<div class=status-text>" + status["content"];
@@ -90,8 +97,10 @@ function updateStatuses(user, statuses) {
             }
         }
         content_html += "</div>";
-        content_html += "<span class=status-counts>&#128172; " + status["replies_count"] + " &#128257; " + status["reblogs_count"] + " &#11088; " + status["favourites_count"] + "</span>";
-        content_html += "<div class=status-footer>via <a href=" + status["application"]["website"] + ">" + status["application"]["name"] + "</a></div>";
+        content_html += "<span class=status-counts>&#128172; " + status["replies_count"] + " &#128640; " + status["reblogs_count"] + " &#11088; " + status["favourites_count"] + "</span>";
+        if (status["application"] && status["application"]["website"]) {
+            content_html += "<div class=status-footer>via <a href=" + status["application"]["website"] + ">" + status["application"]["name"] + "</a></div>";
+        }
         content.innerHTML = content_html;
         let url = document.createElement('url');
         url.textContent = status["url"];
