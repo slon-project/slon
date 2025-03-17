@@ -789,6 +789,8 @@ JsonObject* @slon_activitypub_create_status_for_remote_account(SlonHttpSession* 
         if (reply_to_post) {
             new_status->set("in_reply_to_id", reply_to_post->@("id"), JSON_STRING);
             new_status->set("in_reply_to_acct_id", reply_to_post->o("account")->@("id"), JSON_STRING);
+            reply_to_post->set("replies_count", reply_to_post->@("replies_count") + 1, JSON_NUMBER);
+            @slon_db_save_status_to_disk(reply_to_post);
         }
     }
 
