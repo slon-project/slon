@@ -785,7 +785,7 @@ JsonObject* @slon_activitypub_create_status_for_remote_account(SlonHttpSession* 
     }
 
     if (account && (o->@("inReplyTo") || o->@("inReplyToAtomUri"))) {
-        JsonObject* reply_to_post = @slon_api_find_status_by_uri(o->@("inReplyTo"), account->@("id"));
+        JsonObject* reply_to_post = @slon_api_find_status_by_uri(o->@("inReplyTo"));
         if (reply_to_post) {
             new_status->set("in_reply_to_id", reply_to_post->@("id"), JSON_STRING);
             new_status->set("in_reply_to_acct_id", reply_to_post->o("account")->@("id"), JSON_STRING);
