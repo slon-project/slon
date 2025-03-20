@@ -5,6 +5,9 @@
         account_id = session->auth->@("account_id"); \
     };
 
+SlonHttpSession* SLON_API_DUMMY_SESSION = CAlloc(sizeof(SlonHttpSession));
+SLON_API_DUMMY_SESSION->mem_task = slon_mem_task;
+
 extern @http_response* @slon_activitypub_signed_request(U8* url_string, U8* fetch_buffer, JsonObject* request_object = NULL, I64 verb = SLON_HTTP_VERB_POST, U8* signatory = NULL);
 
 class SlonCatboxUpload {
@@ -260,6 +263,36 @@ JsonObject* @slon_api_find_status_by_uri(U8* uri, U8* account_id = NULL)
         key = key->next;
     }
     return NULL;
+}
+
+U0 @slon_api_notify_account(JsonObject* target_acct, JsonObject* source_acct, U8* type, JsonObject* status = NULL)
+{
+    U8 scratch_buffer[256];
+    SlonHttpSession* session = SLON_API_DUMMY_SESSION;
+
+    U8* id = @slon_api_generate_unique_id(session);
+    U8* created_at = @slon_api_timestamp_from_cdate(session, Now);
+
+    if (!db->o("notifications")->@(target_acct->@("username"))) {
+        db->o("notifications")->set(target_acct->@("username"), Json.CreateArray(slon_db_mem_task), JSON_ARRAY);
+    }
+
+    JsonArray* notifications = db->o("notifications")->a(target_acct->@("username"));
+
+    JsonObject* notification = Json.CreateObject(slon_db_mem_task);
+    notification->set("id", id, JSON_STRING);
+    notification->set("type", type, JSON_STRING);
+    notification->set("created_at", created_at, JSON_STRING);
+    StrPrint(scratch_buffer, "ungrouped-%s", id);
+    notification->set("group_key", scratch_buffer, JSON_STRING);
+    notification->set("account", source_acct, JSON_OBJECT);
+    if (status) {
+        notification->set("status", status, JSON_OBJECT);
+    }
+    notifications->append(notification);
+    @slon_db_save_notifications_to_disk;
+    @slon_free(session, created_at);
+    @slon_free(session, id);
 }
 
 U0 @slon_api_create_status(JsonObject* status, U8* account_id, U8* to_ap_user = NULL)

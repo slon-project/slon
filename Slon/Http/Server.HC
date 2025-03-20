@@ -743,6 +743,7 @@ U0 @slon_http_handle_post_request(SlonHttpSession* session)
     #include "Endpoints/Post/Apps";
     #include "Endpoints/Post/Markers";
     #include "Endpoints/Post/Media";
+    #include "Endpoints/Post/Notifications";
     #include "Endpoints/Post/OAuth";
     #include "Endpoints/Post/Polls";
     #include "Endpoints/Post/Statuses";

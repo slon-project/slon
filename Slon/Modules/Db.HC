@@ -226,6 +226,26 @@ U0 @slon_db_load_markers_from_disk()
     db->set("markers", markers, JSON_OBJECT);
 }
 
+U0 @slon_db_load_notifications_from_disk()
+{
+    JsonObject* notifications = Json.CreateObject(slon_db_mem_task);
+    U8 scratch_buffer[256];
+    StrPrint(scratch_buffer, "%s/notifications/*.json", SLON_DB_PATH);
+    CDirEntry* files = FilesFind(scratch_buffer);
+    CDirEntry* de = files;
+    JsonArray* notification_array = NULL;
+    while (de) {
+        notification_array = Json.ParseFile(de->full_name, slon_db_mem_task);
+        if (notification_array) {
+            StrFind(".json", de->name)[0] = NULL;
+            notifications->set(de->name, notification_array, JSON_ARRAY);
+        }
+        de = de->next;
+    }
+    DirTreeDel(files);
+    db->set("notifications", notifications, JSON_OBJECT);
+}
+
 U0 @slon_db_load_settings_from_disk()
 {
     U8 scratch_buffer[256];
@@ -436,6 +456,17 @@ U0 @slon_db_save_markers_to_disk()
     }
 }
 
+U0 @slon_db_save_notifications_to_disk()
+{
+    U8 scratch_buffer[256];
+    JsonKey* key = db->o("notifications")->keys;
+    while (key) {
+        StrPrint(scratch_buffer, "%s/notifications/%s.json", SLON_DB_PATH, key->name);
+        Json.DumpToFile(scratch_buffer, key->value, slon_db_mem_task);
+        key = key->next;
+    }
+}
+
 U0 @slon_db_save_settings_to_disk()
 {
     U8 scratch_buffer[256];
@@ -489,6 +520,7 @@ U0 @slon_db_save_to_disk()
     @slon_db_save_following_to_disk();
     @slon_db_save_instance_to_disk();
     @slon_db_save_markers_to_disk();
+    @slon_db_save_notifications_to_disk();
     @slon_db_save_oauth_to_disk();
     @slon_db_save_private_keys_to_disk();
     @slon_db_save_reblogs_to_disk();
@@ -516,6 +548,7 @@ U0 @slon_db_load_from_defaults()
     db->set("instance", Json.ParseFile("M:/Slon/Static/defaults/instance.json", slon_db_mem_task), JSON_OBJECT);
     db->set("markers", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("media", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    db->set("notifications", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("reblogs", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("settings", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
     db->set("statuses", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
@@ -550,6 +583,7 @@ U0 @slon_db_load_from_disk()
     @slon_db_load_instance_from_disk();
     @slon_db_load_markers_from_disk();
     db->set("media", Json.CreateObject(slon_db_mem_task), JSON_OBJECT);
+    @slon_db_load_notifications_from_disk();
     @slon_db_load_oauth_from_disk();
     @slon_db_load_reblogs_from_disk();
     @slon_db_load_settings_from_disk();

@@ -29,6 +29,7 @@ WinMax(Fs);
 #include "Api/V2/Filters";
 #include "Api/V2/Instance";
 #include "Api/V2/Media";
+#include "Api/V2/Notifications";
 #include "Api/V2/Search";
 #include "Api/V2/Suggestions";
 
