@@ -44,7 +44,7 @@ function updateStatusContainers() {
 
 function smolDate(a) { return a.split(" ago")[0].replace("a ", "1").replace("an ", "1").replace("days", "d").replace("day", "d").replace("hours", "h").replace("hour", "h").replace("minutes", "m").replace("minute", "m").replace("seconds", "s").replace("second", "s").replace("few", "").replace(" ", "") };
 
-function updateStatuses(user, statuses) {
+function updateStatuses(user, statuses, shouldSort=true) {
     let pageContent = document.getElementsByClassName("page-content")[0];
     let elements = document.createElement('div');
 
@@ -75,7 +75,9 @@ function updateStatuses(user, statuses) {
     }
 
     elements.className = "statuses";
-    statuses.sort((a, b) => b.id - a.id);
+    if (shouldSort) {
+        statuses.sort((a, b) => b.id - a.id);
+    }
     for (var i = 0; i < statuses.length; i++) {
         let status = statuses[i];
         if (statuses[i]["reblog"]) {
@@ -154,11 +156,24 @@ function getStatuses(user) {
         .then(data => updateStatuses(user, data));
 }
 
+function updateStatusWithReplies(user, status, replies) {
+    updateStatuses(user, [status].concat(replies), false);
+}
+
+function getRepliesForStatus(user, status) {
+    fetch("https://error.checksum.fail/api/v1/statuses/" + status.id + "/context", {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => updateStatusWithReplies(user, status, data["descendants"]));
+}
+
 function getStatusById(id, user) {
     fetch("https://error.checksum.fail/api/v1/statuses/" + id, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
     })
-        .then(response => response.json())
-        .then(data => updateStatuses(user, [data]));
+    .then(response => response.json())
+    .then(data => getRepliesForStatus(user, data))
 }
