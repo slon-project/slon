@@ -158,7 +158,7 @@ U0 @slon_api_v1_accounts_get(SlonHttpSession* session)
     if (!StrICmp("relationships", session->path(3))) {
         if (@slon_api_authorized(session)) {
             JsonArray* relationships = Json.CreateArray(slon_mem_task);
-            JsonArray* relationship_of_ids = request_json->@("id");
+            JsonArray* relationship_of_ids = Json.KeyValueAsArray(request_json->@("id", 1), slon_mem_task);
             JsonObject* target_account = NULL;
             if (relationship_of_ids) {
                 for (i = 0; i < relationship_of_ids->length; i++) {
