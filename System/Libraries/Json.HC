@@ -8,6 +8,9 @@
 #define JSON_NULL 6
 #define JSON_HTML 7
 
+#define JSON_ELEMENT_IS_KEY 1
+#define JSON_ELEMENT_IS_ITEM 2
+
 #define JSON_STATE_OBJECT_OR_ARRAY 0
 
 #define JSON_STATE_OBJECT 100
@@ -1462,6 +1465,52 @@ U0 @json_dump_to_file(U8* path, @json_element* el, CTask* mem_task)
     FileWrite(path, json_string, StrLen(json_string));
 }
 
+@json_array* @json_element_value_as_array(@json_element* el, CTask* mem_task, I64 key_or_item)
+{
+    if (!el || !mem_task || !key_or_item) {
+        return NULL;
+    }
+    switch (el->type) {
+    case JSON_ARRAY:
+        switch (key_or_item) {
+        case JSON_ELEMENT_IS_ITEM:
+            return el(@json_item*)->value;
+        case JSON_ELEMENT_IS_KEY:
+            return el(@json_key*)->value;
+        default:
+            return NULL;
+        }
+        break;
+    default:
+        break;
+    }
+    @json_array* arr = CAlloc(sizeof(@json_array), mem_task);
+    arr->mem_task = mem_task;
+    arr->sig = JSON_SIG;
+    arr->type = JSON_ARRAY;
+    switch (key_or_item) {
+    case JSON_ELEMENT_IS_ITEM:
+        @json_append_item(arr, el(@json_item*)->value, el->type);
+        break;
+    case JSON_ELEMENT_IS_KEY:
+        @json_append_item(arr, el(@json_key*)->value, el->type);
+        break;
+    default:
+        break;
+    }
+    return @json_create_callable_array(arr);
+}
+
+@json_array* @json_item_value_as_array(@json_item* item, CTask* mem_task)
+{
+    return @json_element_value_as_array(item, mem_task, JSON_ELEMENT_IS_ITEM);
+}
+
+@json_array* @json_key_value_as_array(@json_key* key, CTask* mem_task)
+{
+    return @json_element_value_as_array(key, mem_task, JSON_ELEMENT_IS_KEY);
+}
+
 @json_element* @json_clone(@json_element* el, CTask* mem_task)
 {
     if (!el || !mem_task) {
@@ -1480,6 +1529,8 @@ class @json
     @json_array* (*CreateArray)(CTask* mem_task);
     @json_object* (*CreateObject)(CTask* mem_task);
     U0 (*DumpToFile)(U8* path, @json_element* el, CTask* mem_task);
+    @json_array* (*KeyValueAsArray)(@json_key* key, CTask* mem_task);
+    @json_array* (*ItemValueAsArray)(@json_item* item, CTask* mem_task);
     @json_element* (*Parse)(U8* str, CTask* mem_task);
     U64 (*ParseFile)(U8* path, CTask* mem_task);
     U8* (*Stringify)(@json_element* el, CTask* mem_task);
@@ -1490,6 +1541,8 @@ Json.Clone = &@json_clone;
 Json.CreateArray = &@json_create_array;
 Json.CreateObject = &@json_create_object;
 Json.DumpToFile = &@json_dump_to_file;
+Json.ItemValueAsArray = &@json_item_value_as_array;
+Json.KeyValueAsArray = &@json_key_value_as_array;
 Json.Parse = &@json_parse;
 Json.ParseFile = &@json_parse_file;
 Json.Stringify = &@json_stringify;
