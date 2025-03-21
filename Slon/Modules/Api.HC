@@ -19,12 +19,11 @@ class SlonCatboxUpload {
 
 Bool @slon_api_authorized(SlonHttpSession* session)
 {
+    U8 scratch_buffer[256];
     U8* whitelist_ip = db->o("settings")->@("whitelist_ip");
-    if (!whitelist_ip) {
-        return FALSE;
-    }
-    if (StrICmp(session->header("x-forwarded-for"), whitelist_ip)) {
-        return FALSE;
+    if (whitelist_ip) {
+        StrPrint(scratch_buffer, "'%s'", session->header("x-forwarded-for"));
+        return session->auth > 0 && StrFind(scratch_buffer, whitelist_ip);
     }
     return session->auth > 0;
 }
