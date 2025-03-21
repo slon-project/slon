@@ -105,7 +105,9 @@ function updateStatuses(user, statuses, shouldSort=true) {
         }
         content_html += "</div>";
         if (user != "") {
+            content_html += status["replies_count"] ? "<a href=" + status["url"] + ">" : "";
             content_html += "<span class=status-counts>&#128172; " + status["replies_count"] + " &#128640; " + status["reblogs_count"] + " &#11088; " + status["favourites_count"] + "</span>";
+            content_html += status["replies_count"] ? "</a>" : "";
         }
         if (status["application"] && status["application"]["website"]) {
             content_html += "<div class=status-footer>via <a href=" + status["application"]["website"] + ">" + status["application"]["name"] + "</a></div>";
