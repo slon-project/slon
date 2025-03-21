@@ -31,7 +31,7 @@ if (String.BeginsWith("/@", session->path())) {
 }
 
 if (!StrICmp("/about", session->path())) {
-    @slon_http_send_file(session, "M:/Slon/Static/html/about.html");
+    @slon_http_send_html_file(session, "M:/Slon/Static/html/about.html");
     return;
 }
 
