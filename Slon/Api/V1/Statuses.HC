@@ -213,30 +213,30 @@ U0 @slon_api_v1_statuses_get(SlonHttpSession* session)
     JsonItem* poll_choice = NULL;
     JsonArray* own_votes = NULL;
 
+    if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
+        JsonObject* context = Json.CreateObject(slon_mem_task);
+        context->set("ancestors", Json.CreateArray(slon_mem_task), JSON_ARRAY);
+
+        // Get ancestors
+        id = session->path(3);
+        status = @slon_api_find_status_by_id(id, NULL);
+        while (status && status->@("in_reply_to_id")) {
+            status = @slon_api_find_status_by_id(status->@("in_reply_to_id"), status->@("in_reply_to_acct_id"));
+            if (status) {
+                context->a("ancestors")->append(status);
+            }
+        }
+
+        // Get descendants
+        id = session->path(3);
+        context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(id), JSON_ARRAY);
+
+        session->send(context);
+        return;
+    }
+
     if (@slon_api_authorized(session)) {
         SLON_AUTH_ACCOUNT_ID
-
-        if (session->path_count() > 4 && !StrICmp("context", session->path(4))) {
-            JsonObject* context = Json.CreateObject(slon_mem_task);
-            context->set("ancestors", Json.CreateArray(slon_mem_task), JSON_ARRAY);
-
-            // Get ancestors
-            id = session->path(3);
-            status = @slon_api_find_status_by_id(id, NULL);
-            while (status && status->@("in_reply_to_id")) {
-                status = @slon_api_find_status_by_id(status->@("in_reply_to_id"), status->@("in_reply_to_acct_id"));
-                if (status) {
-                    context->a("ancestors")->append(status);
-                }
-            }
-
-            // Get descendants
-            id = session->path(3);
-            context->set("descendants", @slon_api_v1_statuses_find_descendants_by_id(id), JSON_ARRAY);
-
-            session->send(context);
-            return;
-        }
 
         status = @slon_api_find_status_by_id(id, NULL);
         if (status) {
