@@ -154,11 +154,17 @@ def generate_iso_c_file():
     tlse_hc_fixup('TLS_WRITE', 'tls_write', tlse_bin_path, tlse_hc_path)
     tlse_hc_fixup('TLS_ESTABLISHED', 'tls_established', tlse_bin_path, tlse_hc_path)
 
-    # Update css/js timestamps for user.html
+    # Update css/js timestamps for user.html, about.html
 
     user_html_file = redsea_path + '/Slon/Static/html/user.html'
     user_html_timestamp = str(time.time())
     res = os.system('cat ' + user_html_file + ' | sed \'s/timestamp=/timestamp=' + user_html_timestamp + '/g\' | sponge ' + user_html_file)
+    if res:
+        raise ValueError(step_error_message + str(res))
+
+    about_html_file = redsea_path + '/Slon/Static/html/about.html'
+    about_html_timestamp = str(time.time())
+    res = os.system('cat ' + about_html_file + ' | sed \'s/timestamp=/timestamp=' + about_html_timestamp + '/g\' | sponge ' + about_html_file)
     if res:
         raise ValueError(step_error_message + str(res))
 

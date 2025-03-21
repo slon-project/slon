@@ -7,6 +7,10 @@ function updateStatusContainers() {
         let horizontal_fill_count = ((pc.offsetWidth - 32) / 16);
         let url = pc.getElementsByTagName('url')[0].textContent;
         let marqueeHref = url == "Unnamed Task" ? window.location : url;
+        if (url.substring(0,1) == '_') {
+            url = url.substring(1);
+            marqueeHref = window.location;
+        }
 
         post_html += "<b>\u2554";
         for (var i = 0; i < (horizontal_fill_count / 2) - ((240 / 16) / 2); i++) {
@@ -47,6 +51,7 @@ function updateStatuses(user, statuses) {
     let container = document.createElement('div');
     container.className = "status-container";
     // Render user profile
+    if (user != "")
     {
         let content = document.createElement('div');
         content.className = "status-content";
@@ -97,7 +102,9 @@ function updateStatuses(user, statuses) {
             }
         }
         content_html += "</div>";
-        content_html += "<span class=status-counts>&#128172; " + status["replies_count"] + " &#128640; " + status["reblogs_count"] + " &#11088; " + status["favourites_count"] + "</span>";
+        if (user != "") {
+            content_html += "<span class=status-counts>&#128172; " + status["replies_count"] + " &#128640; " + status["reblogs_count"] + " &#11088; " + status["favourites_count"] + "</span>";
+        }
         if (status["application"] && status["application"]["website"]) {
             content_html += "<div class=status-footer>via <a href=" + status["application"]["website"] + ">" + status["application"]["name"] + "</a></div>";
         }
