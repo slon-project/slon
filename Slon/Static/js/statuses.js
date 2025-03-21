@@ -89,7 +89,7 @@ function updateStatuses(user, statuses, shouldSort=true) {
         content.className = "status-content";
         let content_html = "";
         if (statuses[i]["reblog"]) {
-            content_html += "&#128640; " + statuses[i]["reblog"]["account"]["username"] + "<br><a style=\"padding-left:36px\" href=\"" + statuses[i]["reblog"]["account"]["remote_actor"] + "\">@" + statuses[i]["reblog"]["account"]["acct"] + "</a><br>";
+            content_html += "<span title=\"" + statuses[i]["account"]["username"] + " boosted\">&#128640;</span> " + statuses[i]["reblog"]["account"]["username"] + "<br><a style=\"padding-left:36px\" href=\"" + statuses[i]["reblog"]["account"]["remote_actor"] + "\">@" + statuses[i]["reblog"]["account"]["acct"] + "</a><br>";
         } else {
             if (status["visibility"] == "public") {
                 content_html += "<span title=Public>&#127758;</span> ";
