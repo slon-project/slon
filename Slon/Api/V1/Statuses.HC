@@ -339,7 +339,6 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
             }
 
             if (!StrICmp("reblog", verb)) {
-                status = Json.Clone(status, slon_db_mem_task);
                 boost = Json.Clone(@slon_api_reblog_status(session, status, account_id), session->mem_task);
                 boost->set("reblogged", TRUE, JSON_BOOLEAN);
                 session->send(boost);
@@ -350,8 +349,8 @@ U0 @slon_api_v1_statuses_post(SlonHttpSession* session)
             }
 
             if (!StrICmp("unreblog", verb)) {
-                status = Json.Clone(status, session->mem_task);
                 @slon_api_unreblog_status(session, status, account_id);
+                status = Json.Clone(status, session->mem_task);
                 status->set("reblogged", FALSE, JSON_BOOLEAN);
                 session->send(status);
                 return;
