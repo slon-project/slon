@@ -90,7 +90,7 @@ U0 @malloc_mem_tasks_init()
 @malloc_mem_tasks_init;
 
 U0 dd() { DocDump(adam_task->put_doc); }
-//@patch_jmp_rel32(&Fault2, &Reboot); // Reboot instead of crashing to the debugger
+@patch_jmp_rel32(&Fault2, &Reboot); // Reboot instead of crashing to the debugger
 U0 NoBeep(I8, Bool) {};
 @patch_jmp_rel32(&Beep, &NoBeep); // Don't delay on beep when entering debugger
 
@@ -121,5 +121,33 @@ Bool DrvLock2(CDrv* dv)
         return FALSE;
 }
 
+CTask* SpawnQue2(U0 (*fp_addr)(U8* data), U8* data = NULL, U8* task_name = NULL,
+    I64 target_cpu, CTask* parent = NULL, // NULL means adam
+    I64 stk_size = 0, I64 flags = 1 << JOBf_ADD_TO_QUE)
+{
+    CTask* res;
+    CJob* tmpc = JobQue(fp_addr, data, target_cpu,
+        flags, JOBT_SPAWN_TASK, task_name, parent, stk_size);
+    CJobCtrl* ctrl;
+
+    while (!Bt(&tmpc->flags, JOBf_DONE)) {
+        LBts(&Fs->task_flags, TASKf_IDLE);
+        Sleep(1);
+    }
+    LBtr(&Fs->task_flags, TASKf_IDLE);
+
+    res = tmpc->spawned_task;
+    ctrl = tmpc->ctrl;
+    PUSHFD
+    CLI while (LBts(&ctrl->flags, JOBCf_LOCKED))
+        Sleep(1);
+    QueRem(tmpc);
+    LBtr(&ctrl->flags, JOBCf_LOCKED);
+    POPFD
+    JobDel(tmpc);
+    return res;
+}
+
 @patch_jmp_rel32(&BlkDevLock, &BlkDevLock2); // Patch BlkDevLock so we don't deadlock on multiple tasks reading from virtio disk
 @patch_jmp_rel32(&DrvLock, &DrvLock2);       // Patch DrvLock so we don't deadlock on multiple tasks reading from virtio disk
+@patch_jmp_rel32(&SpawnQue, &SpawnQue2);     // Patch SpawnQue so we don't deadlock on spawning multicore tasks simultaneously
